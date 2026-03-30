@@ -49,6 +49,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
   const [dashboardFilter, setDashboardFilter] = useState<'loan-seekers' | 'pending' | 'approved' | 'rejected' | null>(null);
   const [dateFilter, setDateFilter] = useState<string>('');
   const [userLeadsFilter, setUserLeadsFilter] = useState<string | null>(null);
+  const [leadsStatusFilter, setLeadsStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (toast) {
@@ -451,14 +452,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
           <div onClick={() => loanSeekersCount > 0 && setDashboardFilter('loan-seekers')} className="cursor-pointer">
             <StatCard title="Loan Seekers" value={loanSeekersCount} icon={<Users />} color="blue" active={dashboardFilter === 'loan-seekers'} />
           </div>
-          <div onClick={() => pendingLeads > 0 && setDashboardFilter('pending')} className="cursor-pointer">
-            <StatCard title="Pending Leads" value={pendingLeads} icon={<Clock />} color="orange" active={dashboardFilter === 'pending'} />
+          <div 
+            onClick={() => {
+              if (pendingLeads > 0) {
+                setLeadsStatusFilter('Pending');
+                setActiveView('leads');
+              }
+            }} 
+            className="cursor-pointer"
+          >
+            <StatCard title="Pending Leads" value={pendingLeads} icon={<Clock />} color="orange" active={false} />
           </div>
-          <div onClick={() => approvedLeads > 0 && setDashboardFilter('approved')} className="cursor-pointer">
-            <StatCard title="Approved" value={approvedLeads} icon={<CheckCircle2 />} color="emerald" active={dashboardFilter === 'approved'} />
+          <div 
+            onClick={() => {
+              if (approvedLeads > 0) {
+                setLeadsStatusFilter('Approved');
+                setActiveView('leads');
+              }
+            }} 
+            className="cursor-pointer"
+          >
+            <StatCard title="Approved" value={approvedLeads} icon={<CheckCircle2 />} color="emerald" active={false} />
           </div>
-          <div onClick={() => rejectedLeads > 0 && setDashboardFilter('rejected')} className="cursor-pointer">
-            <StatCard title="Rejected" value={rejectedLeads} icon={<XCircle />} color="red" active={dashboardFilter === 'rejected'} />
+          <div 
+            onClick={() => {
+              if (rejectedLeads > 0) {
+                setLeadsStatusFilter('Rejected');
+                setActiveView('leads');
+              }
+            }} 
+            className="cursor-pointer"
+          >
+            <StatCard title="Rejected" value={rejectedLeads} icon={<XCircle />} color="red" active={false} />
           </div>
         </div>
 
@@ -685,7 +710,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
       const matchesSearch = (l.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (l.bankName || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesUser = userLeadsFilter ? l.uid === userLeadsFilter : true;
-      return matchesSearch && matchesUser;
+      const matchesStatus = leadsStatusFilter ? l.status === leadsStatusFilter : true;
+      return matchesSearch && matchesUser && matchesStatus;
     });
 
     return (
@@ -693,10 +719,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
         <div className="flex items-center justify-between mb-6">
           <div className="flex flex-col gap-1">
             <h2 className="text-2xl font-serif font-bold">Loan Applications (Leads)</h2>
-            {userLeadsFilter && (
-              <div className="flex items-center gap-2 text-xs text-[#5A5A40] font-bold">
-                <span>Filtering by User: {users.find(u => u.uid === userLeadsFilter)?.displayName || leads.find(l => l.uid === userLeadsFilter)?.userName || userLeadsFilter}</span>
-                <button onClick={() => setUserLeadsFilter(null)} className="text-red-500 hover:underline">Clear Filter</button>
+            {(userLeadsFilter || leadsStatusFilter) && (
+              <div className="flex items-center gap-4 text-xs text-[#5A5A40] font-bold">
+                {userLeadsFilter && (
+                  <div className="flex items-center gap-2">
+                    <span>User: {users.find(u => u.uid === userLeadsFilter)?.displayName || leads.find(l => l.uid === userLeadsFilter)?.userName || userLeadsFilter}</span>
+                    <button onClick={() => setUserLeadsFilter(null)} className="text-red-500 hover:underline">Clear</button>
+                  </div>
+                )}
+                {leadsStatusFilter && (
+                  <div className="flex items-center gap-2">
+                    <span>Status: {leadsStatusFilter}</span>
+                    <button onClick={() => setLeadsStatusFilter(null)} className="text-red-500 hover:underline">Clear</button>
+                  </div>
+                )}
+                {(userLeadsFilter && leadsStatusFilter) && (
+                  <button 
+                    onClick={() => { setUserLeadsFilter(null); setLeadsStatusFilter(null); }} 
+                    className="bg-red-50 text-red-600 px-2 py-0.5 rounded hover:bg-red-100"
+                  >
+                    Clear All
+                  </button>
+                )}
               </div>
             )}
           </div>
