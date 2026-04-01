@@ -1,0 +1,153 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user's financial and employment details for loan eligibility.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "monthlyIncome": { "type": "number" },
+        "employmentType": { "type": "string", "enum": ["Salaried", "Self-employed"] },
+        "companyType": { "type": "string", "enum": ["MNC", "Startup", "Govt", "Other"] },
+        "companyName": { "type": "string" },
+        "workExperience": { "type": "string", "description": "Years/months in current company" },
+        "city": { "type": "string" },
+        "existingEMIs": { "type": "number" },
+        "age": { "type": "number" },
+        "loanAmountRequired": { "type": "number" },
+        "loanType": { "type": "string", "enum": ["Personal Loan", "Home Loan", "Car Loan", "Jewelry Loan", "Business Loan"] },
+        "cibilScore": { "type": "number" },
+        "mobile": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A single message in a chat conversation.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role", "content", "timestamp"]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "Stores chat history for a user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "ChatMessage" }
+        },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "messages"]
+    },
+    "BankOffer": {
+      "title": "Bank Offer",
+      "description": "Details of a loan offer from a bank or NBFC.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bankName": { "type": "string" },
+        "loanType": { "type": "string", "enum": ["Personal Loan", "Home Loan", "Car Loan", "Jewelry Loan", "Business Loan"] },
+        "minAmount": { "type": "number" },
+        "maxAmount": { "type": "number" },
+        "minInterestRate": { "type": "number" },
+        "maxInterestRate": { "type": "number" },
+        "processingFee": { "type": "string" },
+        "minTenure": { "type": "number", "description": "in months" },
+        "maxTenure": { "type": "number", "description": "in months" },
+        "minCibilScore": { "type": "number", "description": "Minimum acceptable CIBIL score" },
+        "interestRateBelow750": { "type": "number", "description": "Interest rate for CIBIL < 750" },
+        "maxAmountPercentBelow750": { "type": "number", "description": "Max loan amount % for CIBIL < 750" },
+        "contactPerson": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "contactEmail": { "type": "string", "format": "email" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bankName", "loanType"]
+    },
+    "CacheEntry": {
+      "title": "Cache Entry",
+      "description": "Stores cached AI responses for specific queries and profiles.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "description": "Hash or unique key for the query+profile" },
+        "response": { "type": "object", "description": "The cached AI response object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["key", "response", "timestamp"]
+    },
+    "LoanApplication": {
+      "title": "Loan Application",
+      "description": "Stores details of a loan application (lead).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User UID" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string", "format": "email" },
+        "userMobile": { "type": "string" },
+        "bankId": { "type": "string" },
+        "bankName": { "type": "string" },
+        "loanType": { "type": "string" },
+        "loanAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Contacted", "Approved", "Rejected"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "bankId", "timestamp"]
+    },
+    "StaffInvite": {
+      "title": "Staff Invite",
+      "description": "Stores pre-authorized staff emails and permissions.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["staff", "admin"] },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "canManageBanks": { "type": "boolean" },
+            "canManageLeads": { "type": "boolean" },
+            "canManageUsers": { "type": "boolean" }
+          }
+        },
+        "invitedBy": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile and financial data."
+    },
+    "/chats/{uid}": {
+      "schema": "ChatSession",
+      "description": "User's AI advisor chat history."
+    },
+    "/bankOffers/{offerId}": {
+      "schema": "BankOffer",
+      "description": "Loan offers from various banks."
+    },
+    "/cache/{key}": {
+      "schema": "CacheEntry",
+      "description": "Cached AI responses to reduce token cost and latency."
+    },
+    "/loanApplications/{applicationId}": {
+      "schema": "LoanApplication",
+      "description": "Lead tracking for loan applications."
+    },
+    "/staffInvites/{inviteId}": {
+      "schema": "StaffInvite",
+      "description": "Pre-authorized staff invitations."
+    }
+  }
+}
