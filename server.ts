@@ -1101,9 +1101,9 @@ async function startServer() {
         )
         SELECT 
           u.uid, 
-          COALESCE(a.user_name, u.display_name) as user_name, 
-          COALESCE(a.user_email, u.email) as user_email, 
-          COALESCE(a.user_mobile, u.mobile) as user_mobile, 
+          COALESCE(u.display_name, a.user_name) as user_name, 
+          COALESCE(u.email, a.user_email) as user_email, 
+          COALESCE(u.mobile, a.user_mobile) as user_mobile, 
           a.id, 
           a.bank_id, 
           a.bank_name, 
