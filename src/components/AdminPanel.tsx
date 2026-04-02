@@ -186,15 +186,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
   };
 
   const updateUserPermission = async (uid: string, permission: keyof NonNullable<UserProfile['permissions']>, value: boolean) => {
-    if (!canManageUsers) return;
+    if (!canManageUsers) {
+      setToast({ message: 'You do not have permission to manage users', type: 'error' });
+      return;
+    }
     try {
       const user = users.find(u => u.uid === uid);
       const currentPermissions = user?.permissions || { canManageBanks: false, canManageLeads: false, canManageUsers: false };
       const newPermissions = { ...currentPermissions, [permission]: value };
       await apiService.updateUserPermissions(uid, newPermissions);
+      setToast({ message: `Permission ${permission} updated successfully`, type: 'success' });
       refreshData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating permissions:', error);
+      setToast({ message: `Failed to update permission: ${error.message || error}`, type: 'error' });
     }
   };
 
@@ -1626,7 +1631,10 @@ const PermissionToggle: React.FC<{ label: string; value: boolean; onChange: (v: 
       onClick={() => onChange(!value)}
       className={`w-8 h-4 rounded-full relative transition-all ${value ? 'bg-[#5A5A40]' : 'bg-gray-200'}`}
     >
-      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${value ? 'left-4.5' : 'left-0.5'}`} />
+      <div 
+        className="absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all"
+        style={{ left: value ? '18px' : '2px' }}
+      />
     </button>
   </div>
 );

@@ -50,7 +50,11 @@ export default function App() {
                 email: u.email,
                 displayName: u.displayName || u.email.split('@')[0],
                 role: invite.role as 'admin' | 'staff' | 'user',
-                permissions: invite.permissions || [],
+                permissions: invite.permissions || {
+                  canManageBanks: false,
+                  canManageLeads: true,
+                  canManageUsers: false
+                },
                 monthlyIncome: 0,
                 employmentType: 'Salaried',
                 companyType: 'Other',
