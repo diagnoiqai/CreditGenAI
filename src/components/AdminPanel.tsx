@@ -84,7 +84,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
   const [leadsLimit, setLeadsLimit] = useState(100);
   const [usersLimit, setUsersLimit] = useState(200);
 
-  const isSuperAdmin = user?.email === 'theskyaigiants@gmail.com' || profile?.email === 'theskyaigiants@gmail.com';
+  const adminEmail = typeof process !== 'undefined' ? process.env.ADMIN_EMAIL : '';
+  const isSuperAdmin = user?.email === adminEmail || profile?.email === adminEmail;
   const canManageBanks = profile?.permissions?.canManageBanks || profile?.role === 'admin' || isSuperAdmin;
   const canManageLeads = profile?.permissions?.canManageLeads || profile?.role === 'admin' || isSuperAdmin || isStaff;
   const canManageUsers = profile?.permissions?.canManageUsers || profile?.role === 'admin' || isSuperAdmin;
@@ -358,7 +359,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
     const pendingLeads = filteredLeads.filter(l => l.status === 'Pending').length;
     const approvedLeads = filteredLeads.filter(l => l.status === 'Approved').length;
     const rejectedLeads = filteredLeads.filter(l => l.status === 'Rejected').length;
-    const loanSeekers = filteredUsers.filter(u => (u.role === 'user' || !u.role) && u.email !== 'theskyaigiants@gmail.com');
+    const loanSeekers = filteredUsers.filter(u => (u.role === 'user' || !u.role) && u.email !== adminEmail);
     const loanSeekersCount = loanSeekers.length;
     
     const leadCounts = filteredLeads.reduce((acc, lead) => {
@@ -1127,7 +1128,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
   const renderUsers = () => {
     const loanSeekers = users.filter(u => 
       (u.role === 'user' || !u.role) && 
-      u.email !== 'theskyaigiants@gmail.com' &&
+      u.email !== adminEmail &&
       !staffInvites.some(i => i.email === u.email)
     ).filter(u => {
       const matchesSearch = (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -1310,7 +1311,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, isStaff =
   };
 
   const renderStaff = () => {
-    const activeStaff = users.filter(u => u.role === 'staff' || (u.role === 'admin' && u.email !== 'theskyaigiants@gmail.com'));
+    const activeStaff = users.filter(u => u.role === 'staff' || (u.role === 'admin' && u.email !== adminEmail));
     
     return (
       <div className="space-y-8">
