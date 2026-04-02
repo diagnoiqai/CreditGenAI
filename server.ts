@@ -1217,20 +1217,31 @@ async function startServer() {
       // Send WhatsApp Notification if status changed
       try {
         console.log(`DEBUG: Attempting WhatsApp notification for applicationId: ${applicationId}`);
-        const appResult = await pool.query('SELECT * FROM dev.applications WHERE id = $1::text', [applicationId]);
+        // Get application WITH current user mobile from users table
+        const appResult = await pool.query(
+          `SELECT a.*, u.mobile as user_current_mobile, u.display_name as user_current_name 
+           FROM dev.applications a 
+           LEFT JOIN dev.users u ON a.uid = u.uid 
+           WHERE a.id = $1::text`, 
+          [applicationId]
+        );
         if (appResult.rows.length > 0) {
           const app = appResult.rows[0];
-          console.log(`DEBUG: Application found. user_mobile: ${app.user_mobile}, twilioClient: ${!!twilioClient}, TWILIO_WHATSAPP_NUMBER: ${process.env.TWILIO_WHATSAPP_NUMBER}`);
+          // Use CURRENT data from users table, fallback to application snapshot
+          const mobileNumber = app.user_current_mobile || app.user_mobile;
+          const userName = app.user_current_name || app.user_name;
           
-          if (twilioClient && process.env.TWILIO_WHATSAPP_NUMBER && app.user_mobile) {
-            let formattedMobile = app.user_mobile.trim().replace(/\s+/g, '');
+          console.log(`DEBUG: Application found. user_mobile: ${mobileNumber}, twilioClient: ${!!twilioClient}, TWILIO_WHATSAPP_NUMBER: ${process.env.TWILIO_WHATSAPP_NUMBER}`);
+          
+          if (twilioClient && process.env.TWILIO_WHATSAPP_NUMBER && mobileNumber) {
+            let formattedMobile = mobileNumber.trim().replace(/\s+/g, '');
             if (formattedMobile.length === 10 && !formattedMobile.startsWith('+')) {
               formattedMobile = '+91' + formattedMobile;
             } else if (!formattedMobile.startsWith('+')) {
               formattedMobile = '+' + formattedMobile;
             }
 
-            const messageBody = `Hello ${app.user_name},\n\nYour loan application for ${app.bank_name || 'your chosen bank'} has been updated.\n\nNew Status: *${status}*\n${subStatus ? `Update: ${subStatus}` : ''}\n\nYou can check more details in your dashboard.`;
+            const messageBody = `Hello ${userName},\n\nYour loan application for ${app.bank_name || 'your chosen bank'} has been updated.\n\nNew Status: *${status}*\n${subStatus ? `Update: ${subStatus}` : ''}\n\nYou can check more details in your dashboard.`;
 
             // Ensure from number has whatsapp: prefix
             let fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
@@ -1247,7 +1258,7 @@ async function startServer() {
             });
             console.log(`SUCCESS: WHATSAPP STATUS UPDATE SENT. SID: ${waResult.sid}`);
           } else {
-            console.warn(`WARNING: WhatsApp notification skipped. twilioClient: ${!!twilioClient}, from: ${!!process.env.TWILIO_WHATSAPP_NUMBER}, mobile: ${!!app.user_mobile}`);
+            console.warn(`WARNING: WhatsApp notification skipped. twilioClient: ${!!twilioClient}, from: ${!!process.env.TWILIO_WHATSAPP_NUMBER}, mobile: ${!!mobileNumber}`);
           }
         } else {
           console.warn(`WARNING: Application not found for WhatsApp notification: ${applicationId}`);
