@@ -22,7 +22,8 @@ export const initDb = async () => {
         await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
         console.log('SUCCESS: pgvector and pgcrypto extensions enabled.');
       } catch (e: unknown) {
-        console.warn('WARNING: extensions could not be enabled. Falling back to text search.', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('WARNING: extensions could not be enabled. Falling back to text search.', errMsg);
       }
       
       // Create tables if they don't exist
@@ -71,7 +72,7 @@ export const initDb = async () => {
           FROM information_schema.columns 
           WHERE table_schema = 'dev' AND table_name = 'token_usage'
         `);
-        const existingTokenCols = tokenCols.rows.map(r => r.column_name);
+        const existingTokenCols = tokenCols.rows.map((r: { column_name: string }) => r.column_name);
         
         if (!existingTokenCols.includes('input_tokens')) {
           await client.query('ALTER TABLE dev.token_usage ADD COLUMN input_tokens INTEGER DEFAULT 0');
@@ -83,7 +84,8 @@ export const initDb = async () => {
           await client.query('ALTER TABLE dev.token_usage ADD COLUMN model TEXT');
         }
       } catch (err: unknown) {
-        console.error('Error checking token_usage columns:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error('Error checking token_usage columns:', errMsg);
       }
 
       // Ensure users table has all required columns (for existing tables)
@@ -93,7 +95,7 @@ export const initDb = async () => {
           FROM information_schema.columns 
           WHERE table_schema = 'dev' AND table_name = 'users'
         `);
-        const existingUserCols = userCols.rows.map(r => r.column_name);
+        const existingUserCols = userCols.rows.map((r: { column_name: string }) => r.column_name);
         
         if (!existingUserCols.includes('mobile')) {
           await client.query('ALTER TABLE dev.users ADD COLUMN mobile TEXT');
@@ -120,7 +122,8 @@ export const initDb = async () => {
           await client.query('ALTER TABLE dev.users ADD COLUMN marital_status TEXT');
         }
       } catch (e: unknown) {
-        console.warn('Could not fix users table columns:', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not fix users table columns:', errMsg);
       }
 
       await client.query(`
@@ -161,7 +164,7 @@ export const initDb = async () => {
         FROM information_schema.columns 
         WHERE table_schema = 'dev' AND table_name = 'bank_offers'
       `);
-      const existingBankCols = bankOffersCols.rows.map(r => r.column_name);
+      const existingBankCols = bankOffersCols.rows.map((r: { column_name: string }) => r.column_name);
       
       if (!existingBankCols.includes('repayment_policy')) {
         await client.query('ALTER TABLE dev.bank_offers ADD COLUMN repayment_policy TEXT');
@@ -221,7 +224,8 @@ export const initDb = async () => {
         try {
           await client.query('ALTER TABLE dev.bank_offers ADD COLUMN policy_vector vector(3072)');
         } catch (e: unknown) {
-          console.warn('Could not add policy_vector column. pgvector might not be enabled.');
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn('Could not add policy_vector column. pgvector might not be enabled.', errMsg);
         }
       } else {
         // Check dimension and update if necessary
@@ -237,7 +241,8 @@ export const initDb = async () => {
             await client.query('ALTER TABLE dev.bank_offers ALTER COLUMN policy_vector TYPE vector(3072)');
           }
         } catch (e: unknown) {
-          console.warn('Could not update policy_vector dimension:', e);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn('Could not update policy_vector dimension:', errMsg);
         }
       }
 
@@ -291,7 +296,8 @@ export const initDb = async () => {
           )
         `);
       } catch (e: unknown) {
-        console.warn('Could not create applications table:', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not create applications table:', errMsg);
       }
 
       // 2. Ensure applications table has all required columns and correct types
@@ -301,7 +307,7 @@ export const initDb = async () => {
           FROM information_schema.columns 
           WHERE table_schema = 'dev' AND table_name = 'applications'
         `);
-        const existingAppsCols = appsCols.rows.map(r => r.column_name);
+        const existingAppsCols = appsCols.rows.map((r: { column_name: string }) => r.column_name);
         const columns = appsCols.rows;
         
         if (!existingAppsCols.includes('id')) {
@@ -315,7 +321,8 @@ export const initDb = async () => {
               WHERE a.ctid < b.ctid AND a.id = b.id;
             `);
           } catch (dupError: unknown) {
-            console.warn('Could not clean up duplicates in applications table:', dupError);
+            const errMsg = dupError instanceof Error ? dupError.message : String(dupError);
+            console.warn('Could not clean up duplicates in applications table:', errMsg);
           }
 
           // Ensure id is primary key
@@ -333,12 +340,13 @@ export const initDb = async () => {
               await client.query('ALTER TABLE dev.applications ALTER COLUMN id SET NOT NULL');
               await client.query('ALTER TABLE dev.applications ADD PRIMARY KEY (id)');
             } catch (pkAddError: unknown) {
-              console.warn('Could not add primary key to applications table:', pkAddError);
+              const errMsg = pkAddError instanceof Error ? pkAddError.message : String(pkAddError);
+              console.warn('Could not add primary key to applications table:', errMsg);
             }
           }
 
           // Ensure id is serial
-          const idCol = columns.find(c => c.column_name === 'id');
+          const idCol = columns.find((c: { column_name: string; column_default: string | null }) => c.column_name === 'id');
           if (idCol && (!idCol.column_default || !idCol.column_default.includes('nextval'))) {
             console.log('INFO: Fixing applications table id column to be serial...');
             try {
@@ -347,7 +355,8 @@ export const initDb = async () => {
               await client.query('ALTER SEQUENCE dev.applications_id_seq OWNED BY dev.applications.id');
               await client.query("SELECT setval('dev.applications_id_seq', COALESCE((SELECT MAX(id) FROM dev.applications), 0) + 1)");
             } catch (seqError: unknown) {
-              console.warn('Could not fix id column default:', seqError);
+              const errMsg = seqError instanceof Error ? seqError.message : String(seqError);
+              console.warn('Could not fix id column default:', errMsg);
             }
           }
         }
@@ -375,13 +384,14 @@ export const initDb = async () => {
         }
 
         // Fix bank_id type if it's integer
-        const bankIdCol = columns.find(c => c.column_name === 'bank_id');
+        const bankIdCol = columns.find((c: { column_name: string; data_type: string }) => c.column_name === 'bank_id');
         if (bankIdCol && bankIdCol.data_type === 'integer') {
           console.log('INFO: Converting applications.bank_id from integer to text...');
           await client.query('ALTER TABLE dev.applications ALTER COLUMN bank_id TYPE TEXT');
         }
       } catch (e: unknown) {
-        console.warn('Could not fix applications table columns:', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not fix applications table columns:', errMsg);
       }
 
       // 3. Create application_history table
@@ -399,7 +409,8 @@ export const initDb = async () => {
           )
         `);
       } catch (e: unknown) {
-        console.warn('Could not create application_history table:', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not create application_history table:', errMsg);
         // Fallback: Create without foreign key if it fails (e.g. due to PK issue)
         try {
           await client.query(`
@@ -416,7 +427,8 @@ export const initDb = async () => {
           `);
           console.log('INFO: Created application_history without foreign key constraint.');
         } catch (fallbackError: unknown) {
-          console.error('CRITICAL: Could not create application_history table even without FK:', fallbackError);
+          const errMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          console.error('CRITICAL: Could not create application_history table even without FK:', errMsg);
         }
       }
 
@@ -427,8 +439,8 @@ export const initDb = async () => {
           FROM information_schema.columns 
           WHERE table_schema = 'dev' AND table_name = 'application_history'
         `);
-        const existingHistCols = histColsResult.rows.map(r => r.column_name);
-        const appIdCol = histColsResult.rows.find(r => r.column_name === 'application_id');
+        const existingHistCols = histColsResult.rows.map((r: { column_name: string }) => r.column_name);
+        const appIdCol = histColsResult.rows.find((r: { column_name: string; data_type: string }) => r.column_name === 'application_id');
         
         if (appIdCol && appIdCol.data_type !== 'text') {
           console.log(`INFO: Converting application_history.application_id from ${appIdCol.data_type} to text...`);
@@ -441,7 +453,8 @@ export const initDb = async () => {
             await client.query('ALTER TABLE dev.application_history ADD CONSTRAINT application_history_application_id_fkey FOREIGN KEY (application_id) REFERENCES dev.applications(id) ON DELETE CASCADE');
             console.log('SUCCESS: Converted application_history.application_id to TEXT');
           } catch (alterError: unknown) {
-            console.warn('Could not fully convert application_id with FK. Attempting simple alter...', alterError);
+            const errMsg = alterError instanceof Error ? alterError.message : String(alterError);
+            console.warn('Could not fully convert application_id with FK. Attempting simple alter...', errMsg);
             await client.query('ALTER TABLE dev.application_history ALTER COLUMN application_id TYPE TEXT USING application_id::text');
           }
         }
@@ -459,7 +472,8 @@ export const initDb = async () => {
           await client.query('ALTER TABLE dev.application_history ADD COLUMN updated_by TEXT');
         }
       } catch (e: unknown) {
-        console.warn('Could not fix application_history table columns:', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not fix application_history table columns:', errMsg);
       }
 
       await client.query(`
@@ -480,7 +494,7 @@ export const initDb = async () => {
         FROM information_schema.columns 
         WHERE table_schema = 'dev' AND table_name = 'dynamic_suggestions'
       `);
-      const existingSugCols = suggestionCols.rows.map(r => r.column_name);
+      const existingSugCols = suggestionCols.rows.map((r: { column_name: string }) => r.column_name);
       
       if (!existingSugCols.includes('label') && existingSugCols.includes('suggestion')) {
         await client.query('ALTER TABLE dev.dynamic_suggestions RENAME COLUMN suggestion TO label');
@@ -500,7 +514,8 @@ export const initDb = async () => {
         try {
           await client.query('ALTER TABLE dev.dynamic_suggestions ADD COLUMN embedding vector(3072)');
         } catch (e: unknown) {
-          console.warn('Could not add embedding column to dynamic_suggestions. pgvector might not be enabled.');
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn('Could not add embedding column to dynamic_suggestions. pgvector might not be enabled.', errMsg);
         }
       } else {
         // Check dimension and update if necessary
@@ -517,7 +532,8 @@ export const initDb = async () => {
             await client.query('ALTER TABLE dev.dynamic_suggestions ALTER COLUMN embedding TYPE vector(3072)');
           }
         } catch (e: unknown) {
-          console.warn('Could not update embedding dimension:', e);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn('Could not update embedding dimension:', errMsg);
         }
       }
 
@@ -562,7 +578,8 @@ export const initDb = async () => {
           )
         `);
       } catch (e: unknown) {
-        console.warn('Could not create application_attachments table with foreign key:', e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not create application_attachments table with foreign key:', errMsg);
         try {
           await client.query(`
             CREATE TABLE IF NOT EXISTS dev.application_attachments (
@@ -576,7 +593,8 @@ export const initDb = async () => {
           `);
           console.log('INFO: Created application_attachments without foreign key constraint.');
         } catch (fallbackError: unknown) {
-          console.error('CRITICAL: Could not create application_attachments table even without FK:', fallbackError);
+          const errMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          console.error('CRITICAL: Could not create application_attachments table even without FK:', errMsg);
         }
       }
 

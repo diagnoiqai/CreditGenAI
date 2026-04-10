@@ -27,7 +27,7 @@ export const getApplications = async (req: Request, res: Response) => {
       ORDER BY a.created_at DESC
     `;
     const result = await pool.query(query, [uid]);
-    res.json(result.rows.map(row => ({
+    res.json(result.rows.map((row: any) => ({
       id: row.id,
       uid: row.uid,
       bankId: row.bank_id,
