@@ -56,6 +56,7 @@ export type LoanType = 'Personal Loan' | 'Home Loan' | 'Car Loan' | 'Jewelry Loa
 export interface BankOffer {
   id: string;
   bankName: string;
+  aliases?: string[];  // Bank name variations (e.g., 'HDFC', 'hdfc', 'HDFC Bank Ltd')
   loanType: LoanType;
   minAmount: number;
   maxAmount: number;

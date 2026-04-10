@@ -1,5 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { UserProfile, ChatMessage, BankOffer, LoanApplication } from "../types";
+import { findBestBankMatch, findSimilarBanks } from "../utils/bankMatching";
 
 const getGeminiApiKey = () => {
   // Try process.env (Vite define)
@@ -127,7 +128,9 @@ export async function getAIResponse(
 
   // Detect if user is asking about policies
   const isPolicyQuery = kw.includes('policy') || kw.includes('preclosure') || kw.includes('charges') || kw.includes('terms') || kw.includes('condition');
-  const mentionedBank = bankOffers.find(o => kw.includes(o.bankName.toLowerCase()));
+  
+  // Use hybrid bank matching to find mentioned bank (handles typos and aliases)
+  const mentionedBank = findBestBankMatch(lastMsg, bankOffers);
 
   let sortedOffers = [...bankOffers];
 
