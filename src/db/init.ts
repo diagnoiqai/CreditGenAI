@@ -21,7 +21,7 @@ export const initDb = async () => {
         await client.query('CREATE EXTENSION IF NOT EXISTS vector');
         await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
         console.log('SUCCESS: pgvector and pgcrypto extensions enabled.');
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('WARNING: extensions could not be enabled. Falling back to text search.', e);
       }
       
@@ -82,7 +82,7 @@ export const initDb = async () => {
         if (!existingTokenCols.includes('model')) {
           await client.query('ALTER TABLE dev.token_usage ADD COLUMN model TEXT');
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Error checking token_usage columns:', err);
       }
 
@@ -119,7 +119,7 @@ export const initDb = async () => {
         if (!existingUserCols.includes('marital_status')) {
           await client.query('ALTER TABLE dev.users ADD COLUMN marital_status TEXT');
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('Could not fix users table columns:', e);
       }
 
@@ -220,7 +220,7 @@ export const initDb = async () => {
       if (!existingBankCols.includes('policy_vector')) {
         try {
           await client.query('ALTER TABLE dev.bank_offers ADD COLUMN policy_vector vector(3072)');
-        } catch (e) {
+        } catch (e: unknown) {
           console.warn('Could not add policy_vector column. pgvector might not be enabled.');
         }
       } else {
@@ -236,7 +236,7 @@ export const initDb = async () => {
             console.log('INFO: Updating bank_offers.policy_vector dimension to 3072...');
             await client.query('ALTER TABLE dev.bank_offers ALTER COLUMN policy_vector TYPE vector(3072)');
           }
-        } catch (e) {
+        } catch (e: unknown) {
           console.warn('Could not update policy_vector dimension:', e);
         }
       }
@@ -290,7 +290,7 @@ export const initDb = async () => {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
           )
         `);
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('Could not create applications table:', e);
       }
 
@@ -314,7 +314,7 @@ export const initDb = async () => {
               DELETE FROM dev.applications a USING dev.applications b
               WHERE a.ctid < b.ctid AND a.id = b.id;
             `);
-          } catch (dupError) {
+          } catch (dupError: unknown) {
             console.warn('Could not clean up duplicates in applications table:', dupError);
           }
 
@@ -332,7 +332,7 @@ export const initDb = async () => {
               // First ensure no nulls in id
               await client.query('ALTER TABLE dev.applications ALTER COLUMN id SET NOT NULL');
               await client.query('ALTER TABLE dev.applications ADD PRIMARY KEY (id)');
-            } catch (pkAddError) {
+            } catch (pkAddError: unknown) {
               console.warn('Could not add primary key to applications table:', pkAddError);
             }
           }
@@ -346,7 +346,7 @@ export const initDb = async () => {
               await client.query("ALTER TABLE dev.applications ALTER COLUMN id SET DEFAULT nextval('dev.applications_id_seq')");
               await client.query('ALTER SEQUENCE dev.applications_id_seq OWNED BY dev.applications.id');
               await client.query("SELECT setval('dev.applications_id_seq', COALESCE((SELECT MAX(id) FROM dev.applications), 0) + 1)");
-            } catch (seqError) {
+            } catch (seqError: unknown) {
               console.warn('Could not fix id column default:', seqError);
             }
           }
@@ -380,7 +380,7 @@ export const initDb = async () => {
           console.log('INFO: Converting applications.bank_id from integer to text...');
           await client.query('ALTER TABLE dev.applications ALTER COLUMN bank_id TYPE TEXT');
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('Could not fix applications table columns:', e);
       }
 
@@ -398,7 +398,7 @@ export const initDb = async () => {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
           )
         `);
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('Could not create application_history table:', e);
         // Fallback: Create without foreign key if it fails (e.g. due to PK issue)
         try {
@@ -415,7 +415,7 @@ export const initDb = async () => {
             )
           `);
           console.log('INFO: Created application_history without foreign key constraint.');
-        } catch (fallbackError) {
+        } catch (fallbackError: unknown) {
           console.error('CRITICAL: Could not create application_history table even without FK:', fallbackError);
         }
       }
@@ -440,7 +440,7 @@ export const initDb = async () => {
             // Re-add FK
             await client.query('ALTER TABLE dev.application_history ADD CONSTRAINT application_history_application_id_fkey FOREIGN KEY (application_id) REFERENCES dev.applications(id) ON DELETE CASCADE');
             console.log('SUCCESS: Converted application_history.application_id to TEXT');
-          } catch (alterError) {
+          } catch (alterError: unknown) {
             console.warn('Could not fully convert application_id with FK. Attempting simple alter...', alterError);
             await client.query('ALTER TABLE dev.application_history ALTER COLUMN application_id TYPE TEXT USING application_id::text');
           }
@@ -458,7 +458,7 @@ export const initDb = async () => {
         if (!existingHistCols.includes('updated_by')) {
           await client.query('ALTER TABLE dev.application_history ADD COLUMN updated_by TEXT');
         }
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('Could not fix application_history table columns:', e);
       }
 
@@ -499,7 +499,7 @@ export const initDb = async () => {
       if (!existingSugCols.includes('embedding')) {
         try {
           await client.query('ALTER TABLE dev.dynamic_suggestions ADD COLUMN embedding vector(3072)');
-        } catch (e) {
+        } catch (e: unknown) {
           console.warn('Could not add embedding column to dynamic_suggestions. pgvector might not be enabled.');
         }
       } else {
@@ -516,7 +516,7 @@ export const initDb = async () => {
             // If there's data, we might need to null it out or handle it, but for now we'll try direct alter
             await client.query('ALTER TABLE dev.dynamic_suggestions ALTER COLUMN embedding TYPE vector(3072)');
           }
-        } catch (e) {
+        } catch (e: unknown) {
           console.warn('Could not update embedding dimension:', e);
         }
       }
@@ -561,7 +561,7 @@ export const initDb = async () => {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
           )
         `);
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn('Could not create application_attachments table with foreign key:', e);
         try {
           await client.query(`
@@ -575,7 +575,7 @@ export const initDb = async () => {
             )
           `);
           console.log('INFO: Created application_attachments without foreign key constraint.');
-        } catch (fallbackError) {
+        } catch (fallbackError: unknown) {
           console.error('CRITICAL: Could not create application_attachments table even without FK:', fallbackError);
         }
       }
@@ -604,6 +604,92 @@ export const initDb = async () => {
         END $$;
       `);
 
+      // ============ ALIASES COLUMN MIGRATION ============
+      // Check if aliases column exists in bank_offers table
+      try {
+        const aliasesCheckResult = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_schema = 'dev' AND table_name = 'bank_offers' AND column_name = 'aliases'
+        `);
+
+        if (aliasesCheckResult.rows.length === 0) {
+          console.log('INFO: Adding aliases column to dev.bank_offers...');
+          // Add aliases column as TEXT array
+          await client.query(`
+            ALTER TABLE dev.bank_offers 
+            ADD COLUMN aliases TEXT[] DEFAULT ARRAY[]::TEXT[]
+          `);
+          console.log('SUCCESS: aliases column added to dev.bank_offers');
+
+          // Initialize aliases for existing banks
+          console.log('INFO: Initializing aliases for banks...');
+          
+          // HDFC Bank
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['HDFC Bank', 'HDFC', 'hdfc', 'Hdfc', 'HDFC Bank Ltd', 'HDFC Ltd']
+            WHERE bank_name = 'HDFC Bank'
+          `);
+
+          // ICICI Bank
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['ICICI Bank', 'ICICI', 'icici', 'Icici', 'ICICI Bank Ltd', 'ICICI Ltd']
+            WHERE bank_name = 'ICICI Bank'
+          `);
+
+          // SBI (State Bank of India)
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['SBI', 'sbi', 'State Bank of India', 'State Bank', 'SBI Bank', 'SBI Ltd']
+            WHERE bank_name = 'SBI'
+          `);
+
+          console.log('SUCCESS: Aliases initialized for HDFC Bank, ICICI Bank, and SBI');
+        } else {
+          console.log('INFO: aliases column already exists in dev.bank_offers');
+          
+          // Check if aliases are empty/null and populate if needed
+          const emptyAliasesResult = await client.query(`
+            SELECT COUNT(*) FROM dev.bank_offers 
+            WHERE aliases IS NULL OR aliases = ARRAY[]::TEXT[]
+          `);
+          
+          const emptyCount = parseInt(emptyAliasesResult.rows[0].count);
+          if (emptyCount > 0) {
+            console.log(`INFO: Found ${emptyCount} banks with empty aliases. Populating...`);
+            
+            // HDFC Bank
+            await client.query(`
+              UPDATE dev.bank_offers 
+              SET aliases = ARRAY['HDFC Bank', 'HDFC', 'hdfc', 'Hdfc', 'HDFC Bank Ltd', 'HDFC Ltd']
+              WHERE bank_name = 'HDFC Bank' AND (aliases IS NULL OR aliases = ARRAY[]::TEXT[])
+            `);
+
+            // ICICI Bank
+            await client.query(`
+              UPDATE dev.bank_offers 
+              SET aliases = ARRAY['ICICI Bank', 'ICICI', 'icici', 'Icici', 'ICICI Bank Ltd', 'ICICI Ltd']
+              WHERE bank_name = 'ICICI Bank' AND (aliases IS NULL OR aliases = ARRAY[]::TEXT[])
+            `);
+
+            // SBI
+            await client.query(`
+              UPDATE dev.bank_offers 
+              SET aliases = ARRAY['SBI', 'sbi', 'State Bank of India', 'State Bank', 'SBI Bank', 'SBI Ltd']
+              WHERE bank_name = 'SBI' AND (aliases IS NULL OR aliases = ARRAY[]::TEXT[])
+            `);
+
+            console.log('SUCCESS: Aliases populated for banks with empty values');
+          }
+        }
+      } catch (aliasError: unknown) {
+        console.error('ERROR: Failed to create/initialize aliases column:', aliasError);
+        throw aliasError;
+      }
+      // ============ END ALIASES MIGRATION ============
+
       // Explicitly create UNIQUE indexes just in case PRIMARY KEY check is insufficient for some reason
       await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid_unique ON dev.users(uid)');
       await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_sessions_uid_unique ON dev.chat_sessions(uid)');
@@ -618,7 +704,8 @@ export const initDb = async () => {
     } finally {
       client.release();
     }
-  } catch (err) {
-    console.error('CRITICAL: Database initialization failed!', err.stack);
+  } catch (err: unknown) {
+    const errorStack = err instanceof Error ? err.stack : String(err);
+    console.error('CRITICAL: Database initialization failed!', errorStack);
   }
 };

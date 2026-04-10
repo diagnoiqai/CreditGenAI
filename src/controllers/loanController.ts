@@ -41,8 +41,9 @@ export const getApplications = async (req: Request, res: Response) => {
       timestamp: row.created_at,
       attachments: row.attachments
     })));
-  } catch (error) {
-    console.error("DB Error:", error);
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("DB Error:", errMsg);
     res.status(500).json({ error: "Database error" });
   }
 };
@@ -112,8 +113,9 @@ export const applyForLoan = async (req: Request, res: Response) => {
         subject: `New Loan Application - ${profile.displayName}`,
         text: emailContent,
       });
-    } catch (emailError: any) {
-      console.error("FAILED TO SEND EMAIL:", emailError);
+    } catch (emailError: unknown) {
+      const emailMsg = emailError instanceof Error ? emailError.message : String(emailError);
+      console.error("FAILED TO SEND EMAIL:", emailMsg);
     }
 
     if (profile.mobile) {
@@ -122,8 +124,9 @@ export const applyForLoan = async (req: Request, res: Response) => {
           profile.mobile,
           `Hi ${profile.displayName}, we received your application for ${bankOffer.bankName}. To proceed further, please send PAN, AADHAR, Last 3 month payslips, and last 6 months bank statement as attachments here.`
         );
-      } catch (waError) {
-        console.error("FAILED TO SEND INITIAL WHATSAPP:", waError);
+      } catch (waError: unknown) {
+        const waMsg = waError instanceof Error ? waError.message : String(waError);
+        console.error("FAILED TO SEND INITIAL WHATSAPP:", waMsg);
       }
     }
 
@@ -132,8 +135,9 @@ export const applyForLoan = async (req: Request, res: Response) => {
       message: `Application details sent to ${bankOffer.bankName} representative (${bankOffer.contactPerson}).` 
     });
 
-  } catch (dbError) {
-    console.error("Failed to save application to DB:", dbError);
+  } catch (dbError: unknown) {
+    const dbMsg = dbError instanceof Error ? dbError.message : String(dbError);
+    console.error("Failed to save application to DB:", dbMsg);
     return res.status(500).json({ success: false, message: 'Failed to process application in database. Please try again.' });
   }
 };
@@ -142,8 +146,9 @@ export const getBankOffers = async (req: Request, res: Response) => {
   try {
     const result = await pool.query('SELECT * FROM dev.bank_offers ORDER BY bank_name ASC');
     res.json(result.rows);
-  } catch (err) {
-    console.error(err);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(errMsg);
     res.status(500).json({ error: "Failed to fetch bank offers" });
   }
 };
@@ -169,9 +174,9 @@ export const searchPolicies = async (req: Request, res: Response) => {
       const bankNameMatch = await pool.query(`
         SELECT id, bank_name, loan_type, repayment_policy, preclosure_charges, terms_conditions, foreclosure_charges, 0.8 as similarity
         FROM dev.bank_offers
-        WHERE ${words.map((_, i) => `bank_name ILIKE $${i + 1}`).join(' OR ')}
+        WHERE ${words.map((_: string, i: number) => `bank_name ILIKE $${i + 1}`).join(' OR ')}
         LIMIT 3
-      `, words.map(w => `%${w}%`));
+      `, words.map((w: string) => `%${w}%`));
 
       if (bankNameMatch.rows.length > 0) {
         return res.json(bankNameMatch.rows);
@@ -183,7 +188,7 @@ export const searchPolicies = async (req: Request, res: Response) => {
     let results: any[] = [];
     
     if (searchTerms.length > 0) {
-      const conditions = searchTerms.map((_, i) => `(bank_name ILIKE $${i + 1} OR repayment_policy ILIKE $${i + 1} OR preclosure_charges ILIKE $${i + 1} OR terms_conditions ILIKE $${i + 1} OR foreclosure_charges ILIKE $${i + 1})`).join(' OR ');
+      const conditions = searchTerms.map((_: string, i: number) => `(bank_name ILIKE $${i + 1} OR repayment_policy ILIKE $${i + 1} OR preclosure_charges ILIKE $${i + 1} OR terms_conditions ILIKE $${i + 1} OR foreclosure_charges ILIKE $${i + 1})`).join(' OR ');
       const textResult = await pool.query(`
         SELECT id, bank_name, loan_type, repayment_policy, preclosure_charges, terms_conditions, foreclosure_charges, 0.5 as similarity
         FROM dev.bank_offers
@@ -202,8 +207,9 @@ export const searchPolicies = async (req: Request, res: Response) => {
     }
     
     res.json(results.slice(0, 5));
-  } catch (error) {
-    console.error('Error searching policies:', error);
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('Error searching policies:', errMsg);
     res.status(500).json({ error: 'Failed to search policies' });
   }
 };
@@ -253,8 +259,9 @@ export const handleWhatsAppWebhook = async (req: Request, res: Response) => {
           await sendWhatsAppMessage(From, "Thank you! We have received your documents. Our team will review them and proceed with the CIBIL check shortly.");
         }
       }
-    } catch (err) {
-      console.error("ERROR PROCESSING WHATSAPP MEDIA:", err);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("ERROR PROCESSING WHATSAPP MEDIA:", errMsg);
     }
   }
 
