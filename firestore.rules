@@ -1,0 +1,178 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - displayName: string (optional)
+    //   - monthlyIncome: number (optional)
+    //   - employmentType: string (optional, enum: Salaried, Self-employed)
+    //   - companyType: string (optional, enum: MNC, Startup, Govt, Other)
+    //   - companyName: string (optional)
+    //   - workExperience: string (optional)
+    //   - city: string (optional)
+    //   - existingEMIs: number (optional)
+    //   - age: number (optional)
+    //   - loanAmountRequired: number (optional)
+    //   - cibilScore: number (optional)
+    //   - mobile: string (optional)
+    //   - lastUpdated: string (optional, ISO 8601)
+    //
+    // Collection: chats
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - messages: list (required)
+    //   - lastUpdated: string (required, ISO 8601)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (request.auth.token.email == "theskyaigiants@gmail.com") ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isStaff() {
+      return isAuthenticated() &&
+        (
+          isAdmin() ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff')
+        );
+    }
+
+    function hasPermission(permission) {
+      return isAuthenticated() &&
+        (
+          isAdmin() ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions[permission] == true)
+        );
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (!('monthlyIncome' in data) || data.monthlyIncome is number) &&
+             (!('age' in data) || (data.age is number && data.age >= 18)) &&
+             (!('employmentType' in data) || data.employmentType in ['Salaried', 'Self-employed']) &&
+             (!('lastUpdated' in data) || isValidDateString(data.lastUpdated));
+    }
+
+    function isValidStaffInvite(data) {
+      return isValidEmail(data.email) &&
+             data.role in ['staff', 'admin'] &&
+             data.permissions is map &&
+             isValidDateString(data.timestamp);
+    }
+
+    function isValidChat(data) {
+      return data.uid == request.auth.uid &&
+             data.messages is list &&
+             isValidDateString(data.lastUpdated);
+    }
+
+    function isValidBankOffer(data) {
+      return data.bankName is string &&
+             data.loanType in ['Personal Loan', 'Home Loan', 'Car Loan', 'Jewelry Loan', 'Business Loan'] &&
+             data.minAmount is number &&
+             data.maxAmount is number &&
+             data.minInterestRate is number &&
+             data.maxInterestRate is number &&
+             data.processingFee is string &&
+             data.minTenure is number &&
+             data.maxTenure is number &&
+             isValidDateString(data.lastUpdated);
+    }
+
+    function isValidCache(data) {
+      return data.key is string &&
+             data.response is map &&
+             isValidDateString(data.timestamp);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isStaff();
+      allow create: if isOwner(uid) && isValidUser(request.resource.data);
+      allow update: if (isOwner(uid) && isValidUser(request.resource.data)) || (isAdmin() && hasPermission('canManageUsers'));
+    }
+
+    match /chats/{uid} {
+      allow read: if isOwner(uid) || isStaff();
+      allow create: if isOwner(uid) && isValidChat(request.resource.data);
+      allow update: if isOwner(uid) && isValidChat(request.resource.data);
+    }
+
+    match /bankOffers/{offerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || hasPermission('canManageBanks');
+      allow update: if isAdmin() || hasPermission('canManageBanks');
+      allow delete: if isAdmin() || hasPermission('canManageBanks');
+    }
+
+    match /cache/{key} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidCache(request.resource.data);
+    }
+
+    match /loanApplications/{applicationId} {
+      allow read: if (isAuthenticated() && (resource.data.uid == request.auth.uid)) || (isStaff() && hasPermission('canManageLeads'));
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isStaff() && hasPermission('canManageLeads');
+      allow delete: if isAdmin();
+    }
+
+    match /staffInvites/{inviteId} {
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.email);
+      allow list: if isAdmin() || (isAuthenticated() && request.query.limit <= 10 && request.query.filters.email == request.auth.token.email);
+      allow create: if isAdmin() && isValidStaffInvite(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.email);
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
