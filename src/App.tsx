@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { apiService } from './services/apiService';
+import { clearAICache, viewAICache, getAICacheData } from './services/geminiService';
 import { Login } from './components/Login';
 import { LoanForm } from './components/LoanForm';
 import { ChatWindow } from './components/ChatWindow';
@@ -30,6 +31,19 @@ export default function App() {
       setShowLogin(true);
     }
   }, [authReady, user]);
+
+  // Expose cache utilities to browser console
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).clearCache = clearAICache;
+      (window as any).viewCache = viewAICache;
+      (window as any).getCache = getAICacheData;
+      console.log('💡 Cache Commands:');
+      console.log('   - viewCache()  → See all cached responses');
+      console.log('   - getCache()   → Get cache as object');
+      console.log('   - clearCache() → Delete all cache');
+    }
+  }, []);
 
   if (!authReady || (user && loading)) {
     return (

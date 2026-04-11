@@ -56,13 +56,24 @@ export function levenshteinDistance(str1: string, str2: string): number {
 export function findBankExactMatch(userInput: string, banks: BankOffer[]): BankOffer | null {
   const normalized = userInput.toLowerCase().trim();
 
-  return (
-    banks.find(
-      (o) =>
-        o.bankName.toLowerCase() === normalized ||
-        (o.aliases || []).some((a) => a.toLowerCase() === normalized)
-    ) || null
+  // First try exact match
+  let match = banks.find(
+    (o) =>
+      o.bankName.toLowerCase() === normalized ||
+      (o.aliases || []).some((a) => a.toLowerCase() === normalized)
   );
+  
+  if (match) return match;
+  
+  // Then try contains match for short keywords (single word like "icici", "hdfc")
+  if (normalized.split(/\s+/).length === 1) {
+    match = banks.find((o) => 
+      o.bankName.toLowerCase().includes(normalized) ||
+      (o.aliases || []).some((a) => a.toLowerCase().includes(normalized))
+    );
+  }
+  
+  return match || null;
 }
 
 /**
@@ -104,7 +115,7 @@ export function findBankFuzzyMatch(
     }
   } catch (e) {
     // Fuse.js not available, will fall through to next tier
-    console.warn('Fuse.js not available, using fallback matching');
+    // Fallback to Levenshtein distance matching works fine
   }
 
   return null;

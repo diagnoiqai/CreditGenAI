@@ -109,6 +109,7 @@ export const useChat = (
     try {
       const aiResponse = await getAIResponse(updatedMessages, profile, bankOffers, userApplications);
       
+      
       if (aiResponse.action?.data?.bankIds?.length === 1) {
         const bankId = aiResponse.action.data.bankIds[0];
         const bank = bankOffers.find(o => o.id === bankId);
@@ -126,35 +127,31 @@ export const useChat = (
       if (aiResponse.action?.type === 'SEARCH_POLICIES') {
         const searchQuery = aiResponse.action.data?.query || text;
         const policies = await apiService.searchPolicies(searchQuery);
+        
         if (policies && policies.length > 0) {
           const q = text.toLowerCase();
-          const isSpecificCharge = q.includes('preclosure') || q.includes('pre-closure') || q.includes('foreclosure') || q.includes('repayment') || q.includes('terms') || q.includes('condition');
+          const isSpecificCharge = q.includes('preclosure') || q.includes('pre-closure') || q.includes('foreclosure') || q.includes('forecloser') || q.includes('repayment') || q.includes('terms') || q.includes('condition') || q.includes('charge');
+          const isCompareQuery = q.includes('compare') || q.includes('versus') || q.includes('vs') || q.includes('difference');
           
-          if (policies.length === 1 && isSpecificCharge) {
-            const p = policies[0];
-            let directAnswer = "";
-            if (q.includes('preclosure') || q.includes('pre-closure')) {
-              directAnswer = `The preclosure charges for **${p.bank_name}** are: ${p.preclosure_charges || 'Not specified in our records'}.`;
-            } else if (q.includes('foreclosure')) {
-              directAnswer = `The foreclosure charges for **${p.bank_name}** are: ${p.foreclosure_charges || 'Not specified in our records'}.`;
-            } else if (q.includes('repayment')) {
-              directAnswer = `The repayment policy for **${p.bank_name}** is: ${p.repayment_policy || 'Not specified in our records'}.`;
-            } else if (q.includes('terms') || q.includes('condition')) {
-              directAnswer = `The terms and conditions for **${p.bank_name}** are: ${p.terms_conditions || 'Not specified in our records'}.`;
-            }
+          // Filter policies to only those mentioned in the user's query
+          let filteredPolicies = policies;
+          if (policies.length > 1) {
+            // Extract bank names mentioned in the query
+            const mentionedBanks = ['ICICI', 'HDFC', 'Axis', 'SBI', 'Kotak', 'Yes', 'IndusInd'];
+            const queriedBanks = mentionedBanks.filter(bank => q.includes(bank.toLowerCase()));
             
-            if (directAnswer) {
-              aiResponse.text = directAnswer;
-            } else {
-              const details = [];
-              if (p.repayment_policy) details.push(`**Repayment**: ${p.repayment_policy}`);
-              if (p.foreclosure_charges) details.push(`**Foreclosure**: ${p.foreclosure_charges}`);
-              if (p.preclosure_charges) details.push(`**Preclosure**: ${p.preclosure_charges}`);
-              if (p.terms_conditions) details.push(`**Terms**: ${p.terms_conditions}`);
-              aiResponse.text = `Here are the policy details for **${p.bank_name}**:\n\n${details.join('\n')}`;
+            if (queriedBanks.length > 0) {
+              // Filter to only the banks mentioned in the query
+              filteredPolicies = policies.filter(p => 
+                queriedBanks.some(bank => p.bank_name.toLowerCase().includes(bank.toLowerCase()))
+              );
             }
-          } else {
-            const policyText = policies.map(p => {
+          }
+          
+          // Only append if there are multiple banks or it's a comparison query
+          if (isCompareQuery && filteredPolicies.length > 1) {
+            // Comparison with multiple banks - append all for comparison
+            const policyText = filteredPolicies.map(p => {
               let details = [];
               if (p.repayment_policy) details.push(`**Repayment**: ${p.repayment_policy}`);
               if (p.foreclosure_charges) details.push(`**Foreclosure**: ${p.foreclosure_charges}`);
@@ -163,13 +160,10 @@ export const useChat = (
               return `### ${p.bank_name} (${p.loan_type})\n${details.join('\n')}`;
             }).join('\n\n---\n\n');
             
-            // If Gemini already provided a good intro (like comparing), keep it but append the results cleanly
-            if (aiResponse.text && !aiResponse.text.toLowerCase().includes('checking') && !aiResponse.text.toLowerCase().includes('database')) {
-              aiResponse.text += `\n\n${policyText}`;
-            } else {
-              aiResponse.text = policyText;
-            }
+            // Append for comparison
+            aiResponse.text += `\n\n${policyText}`;
           }
+          // For specific charge queries with single bank: Gemini's response is sufficient, don't append
         } else {
           aiResponse.text = `I searched our database but couldn't find specific policy details for "${searchQuery}". Please check with the bank directly or try a different question.`;
         }
@@ -184,6 +178,7 @@ export const useChat = (
       const finalMessages = [...updatedMessages, assistantMsg];
       setMessages(finalMessages);
       saveChat(finalMessages);
+      if (aiResponse.suggestions) setDynamicSuggestions(aiResponse.suggestions);
     } catch (error) {
       console.error("Chat Error:", error);
       const errorMsg: ChatMessage = {

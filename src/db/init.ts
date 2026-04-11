@@ -664,7 +664,35 @@ export const initDb = async () => {
             WHERE bank_name = 'SBI'
           `);
 
-          console.log('SUCCESS: Aliases initialized for HDFC Bank, ICICI Bank, and SBI');
+          // Axis Bank
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['Axis Bank', 'Axis', 'axis', 'AXIS']
+            WHERE bank_name = 'Axis Bank'
+          `);
+
+          // Kotak Bank
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['Kotak Bank', 'Kotak', 'kotak', 'Kotak Mahindra', 'KOTAK']
+            WHERE bank_name = 'Kotak Bank' OR bank_name = 'Kotak Mahindra Bank'
+          `);
+
+          // Yes Bank
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['Yes Bank', 'Yes', 'yes', 'YesBank', 'YESBANK']
+            WHERE bank_name = 'Yes Bank'
+          `);
+
+          // IndusInd Bank
+          await client.query(`
+            UPDATE dev.bank_offers 
+            SET aliases = ARRAY['IndusInd Bank', 'IndusInd', 'indusind', 'INDUSIND', 'Indusind']
+            WHERE bank_name = 'IndusInd Bank'
+          `);
+
+          console.log('SUCCESS: Aliases initialized for all banks');
         } else {
           console.log('INFO: aliases column already exists in dev.bank_offers');
           

@@ -1,6 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { UserProfile, ChatMessage, BankOffer, LoanApplication } from "../types";
-import { findBestBankMatch, findSimilarBanks } from "../utils/bankMatching";
+import { findBestBankMatch, findSimilarBanks, levenshteinDistance } from "../utils/bankMatching";
 
 const getGeminiApiKey = () => {
   // Try process.env (Vite define)
@@ -35,6 +35,21 @@ const localCache = new Map<string, any>();
 export function clearAICache() {
   localCache.clear();
   console.log('INFO: AI Cache cleared.');
+}
+
+export function getAICacheData() {
+  const cacheData: Record<string, any> = {};
+  localCache.forEach((value, key) => {
+    cacheData[key] = value;
+  });
+  return cacheData;
+}
+
+export function viewAICache() {
+  const cacheData = getAICacheData();
+  console.log('📦 AI CACHE CONTENTS:', cacheData);
+  console.log(`📊 Total cached items: ${localCache.size}`);
+  return cacheData;
 }
 
 export async function getAIResponse(
@@ -126,11 +141,77 @@ export async function getAIResponse(
     if (i < messages.length - 5) break; // Only look back 5 messages
   }
 
-  // Detect if user is asking about policies
-  const isPolicyQuery = kw.includes('policy') || kw.includes('preclosure') || kw.includes('charges') || kw.includes('terms') || kw.includes('condition');
+  // Helper function to check keywords with typo tolerance
+  const hasKeywordWithTolerance = (text: string, keywords: string[], maxDistance: number = 2): boolean => {
+    const words = text.toLowerCase().split(/\s+/);
+    for (const keyword of keywords) {
+      for (const word of words) {
+        const distance = levenshteinDistance(word, keyword);
+        if (distance <= maxDistance) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Detect if user is asking about policies or comparisons (with typo tolerance)
+  const policyKeywords = ['policy', 'preclosure', 'pre-closure', 'foreclosure', 'forecloser', 'charges', 'terms', 'condition'];
+  const compareKeywords = ['compare', 'versus', 'vs', 'difference', 'better', 'best'];
+  
+  const isPolicyQuery = hasKeywordWithTolerance(kw, policyKeywords);
+  const isCompareQuery = hasKeywordWithTolerance(kw, compareKeywords);
   
   // Use hybrid bank matching to find mentioned bank (handles typos and aliases)
-  const mentionedBank = findBestBankMatch(lastMsg, bankOffers);
+  let mentionedBank = findBestBankMatch(lastMsg, bankOffers);
+  let mentionedBanks: BankOffer[] = []; // For comparison queries with multiple banks
+  
+  // If exact match fails but policy/compare query, try to extract bank names from keywords
+  if (!mentionedBank && (isPolicyQuery || isCompareQuery)) {
+    const bankKeywords = ['icici', 'hdfc', 'axis', 'sbi', 'bob', 'boi', 'union', 'idbi', 'kotak', 'indusind', 'standard', 'yebank', 'rbl', 'sc', 'scb'];
+    
+    // For comparison queries, find ALL mentioned banks
+    if (isCompareQuery) {
+      const foundMatches: { keyword: string; distance: number }[] = [];
+      for (const keyword of bankKeywords) {
+        const words = kw.split(/\s+/);
+        for (const word of words) {
+          const distance = levenshteinDistance(word, keyword);
+          if (distance <= 2) { // Allow up to 2 character edits
+            // Check if this keyword is already found
+            if (!foundMatches.find(m => m.keyword === keyword)) {
+              foundMatches.push({ keyword, distance });
+            }
+          }
+        }
+      }
+      
+      // Sort by distance and keep all matches
+      foundMatches.sort((a, b) => a.distance - b.distance);
+      
+      mentionedBanks = foundMatches
+        .map(match => findBestBankMatch(match.keyword, bankOffers))
+        .filter((b): b is BankOffer => b !== null);
+    } else {
+      // For single policy queries, find only first bank
+      let bestMatch: { keyword: string; distance: number } | null = null;
+      for (const keyword of bankKeywords) {
+        const words = kw.split(/\s+/);
+        for (const word of words) {
+          const distance = levenshteinDistance(word, keyword);
+          if (distance <= 2) { // Allow up to 2 character edits
+            if (!bestMatch || distance < bestMatch.distance) {
+              bestMatch = { keyword, distance };
+            }
+          }
+        }
+      }
+      
+      if (bestMatch) {
+        mentionedBank = findBestBankMatch(bestMatch.keyword, bankOffers);
+      }
+    }
+  }
 
   let sortedOffers = [...bankOffers];
 
@@ -240,9 +321,24 @@ export async function getAIResponse(
   // Filtering logic: 
   // If "best" or "recommend" is asked, we want the top overall matches.
   // If specific banks are mentioned, we MUST include them.
+  // For policy queries on specific banks, return ONLY that bank.
+  // For comparison queries, return ONLY the compared banks.
   let finalOffers: any[] = [];
   
-  if (isBest) {
+  if (isCompareQuery && mentionedBanks.length > 0) {
+    // Comparison query with multiple banks - return ONLY those banks
+
+    finalOffers = scoredOffers.filter(o => 
+      mentionedBanks.some(b => b.id === o.id)
+    );
+  } else if (isPolicyQuery && mentionedBank) {
+    // For policy queries (preclosure, charges, terms) with specific bank mentioned
+    // Return ONLY that bank's information
+
+    finalOffers = scoredOffers.filter(o => 
+      (o.bankName || '').toLowerCase().includes((mentionedBank!.bankName || '').toLowerCase())
+    );
+  } else if (isBest) {
     // For "best" queries, take top 11 overall
     finalOffers = scoredOffers.slice(0, 11);
   } else {
@@ -261,7 +357,8 @@ export async function getAIResponse(
     }
   }
 
-  console.log(`DEBUG: Found ${finalOffers.length} offers for prompt. Top score: ${finalOffers[0]?.score}`);
+
+  
   
   // Check for any rejected applications and extract the reason
   const rejectedApp = userApplications.find(a => a.status === 'Rejected' && (a.rejectionReason || a.statusNotes));
@@ -310,6 +407,8 @@ Offers (Sorted by score): ${JSON.stringify(finalOffers.map(o => ({
 })))}
 User: ${lastMsg}
 
+🚨 CRITICAL CONSTRAINT: Only mention banks that are in the "Offers (Sorted by score)" list above. DO NOT mention, reference, or discuss any banks that are not in that list. If only 1 bank is in the list, ONLY discuss that 1 bank - do not add information about other banks.
+
 Rules:
 - Use action type "ELIGIBILITY_SUMMARY" for eligibility/amount queries.
 - Use action type "COMPARE_OFFERS" for comparison/finding offers.
@@ -324,6 +423,7 @@ Rules:
 - If the user has already applied to a bank, don't suggest applying again to the same bank unless it was rejected more than 6 months ago.
 - CRITICAL: When comparing two or more banks, ALWAYS use a SINGLE "COMPARE_OFFERS" action with all relevant bank IDs in the "bankIds" array. DO NOT return multiple actions or messages for comparison.
 - CRITICAL: The "Offers" list is already sorted by a robust scoring engine. The first bank is the mathematically "Best Match".
+- CRITICAL: ONLY respond about banks in the provided Offers list. Do NOT hallucinate or add banks not in the list. If the list has 1 bank, respond ONLY about that 1 bank.
 - If a bank has a higher rate but is ranked higher, explain why (e.g. "Only bank where you meet the minimum CIBIL requirement").
 - If the user asks about a specific bank like "Fullerton", and it's in the list, explain its eligibility based on the dynamic CIBIL ${tempCibil}.
 - If the user asks for more than they are eligible for, tell them the maximum they can get based on their income (usually 10-15x monthly income).
@@ -339,6 +439,12 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
 
   try {
     const ai = getAI();
+    
+    // DEBUG: Log input to Gemini
+    console.log('🔵 GEMINI INPUT - User Message:', lastMsg);
+    console.log('🔵 GEMINI INPUT - Banks Being Sent (finalOffers):', finalOffers.map(o => ({ name: o.bankName, rate: o.minInterestRate, score: o.score })));
+    console.log('🔵 GEMINI INPUT - Full Prompt:', prompt);
+    
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -348,7 +454,19 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
       },
     });
 
+    // DEBUG: Log raw response from Gemini
+    console.log('🟡 GEMINI RAW RESPONSE:', response.text);
+    
     const result = JSON.parse(response.text || '{}');
+    
+    // DEBUG: Log parsed response
+    console.log('🟢 GEMINI PARSED RESPONSE:', {
+      text: result.text?.substring(0, 100) + '...',
+      suggestions: result.suggestions,
+      actionType: result.action?.type,
+      actionData: result.action?.data
+    });
+    
     const aiRes = { 
       text: result.text || "I've processed your request.", 
       suggestions: result.suggestions || [],
