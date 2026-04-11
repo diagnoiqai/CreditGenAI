@@ -1,4 +1,5 @@
 import { BankOffer } from '../types';
+import Fuse from 'fuse.js';
 
 /**
  * Bank Matching Configuration
@@ -93,29 +94,22 @@ export function findBankFuzzyMatch(
 ): BankOffer | null {
   const normalized = userInput.toLowerCase().trim();
 
-  // Try to use Fuse.js if available
-  try {
-    const Fuse = require('fuse.js').default;
+  // Use Fuse.js for fuzzy matching
+  const bankData = banks.map((b) => ({
+    id: b.id,
+    searchText: [b.bankName, ...(b.aliases || [])].join(' '),
+  }));
 
-    const bankData = banks.map((b) => ({
-      id: b.id,
-      searchText: [b.bankName, ...(b.aliases || [])].join(' '),
-    }));
+  const fuse = new Fuse(bankData, {
+    keys: ['searchText'],
+    threshold: threshold,
+    distance: 100,
+    minMatchCharLength: 2,
+  });
 
-    const fuse = new Fuse(bankData, {
-      keys: ['searchText'],
-      threshold: threshold,
-      distance: 100,
-      minMatchCharLength: 2,
-    });
-
-    const results = fuse.search(userInput);
-    if (results.length > 0) {
-      return banks.find((b) => b.id === results[0].item.id) || null;
-    }
-  } catch (e) {
-    // Fuse.js not available, will fall through to next tier
-    // Fallback to Levenshtein distance matching works fine
+  const results = fuse.search(userInput);
+  if (results.length > 0) {
+    return banks.find((b) => b.id === results[0].item.id) || null;
   }
 
   return null;
