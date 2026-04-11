@@ -136,8 +136,8 @@ export const useChat = (
           // Filter policies to only those mentioned in the user's query
           let filteredPolicies = policies;
           if (policies.length > 1) {
-            // Extract bank names mentioned in the query
-            const mentionedBanks = ['ICICI', 'HDFC', 'Axis', 'SBI', 'Kotak', 'Yes', 'IndusInd'];
+            // Extract bank names dynamically from bankOffers
+            const mentionedBanks = bankOffers.map(o => o.bankName);
             const queriedBanks = mentionedBanks.filter(bank => q.includes(bank.toLowerCase()));
             
             if (queriedBanks.length > 0) {
