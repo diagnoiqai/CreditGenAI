@@ -2,6 +2,8 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { UserProfile, ChatMessage, BankOffer, LoanApplication } from "../types";
 import { findBestBankMatch, findSimilarBanks, levenshteinDistance } from "../utils/bankMatching";
 import { SYSTEM_PROMPT } from "./systemPrompt";
+// 📊 METRICS & CACHING: Comment out this line to disable metrics for Google AI Studio
+import * as metrics from "./metricsTracker";
 
 // 🔧 Browser-compatible string hash function (replaces Node.js crypto)
 function simpleHash(str: string): string {
@@ -42,80 +44,16 @@ function getAI() {
   return aiInstance;
 }
 
-const localCache = new Map<string, { response: any; timestamp: number; tokens?: { input: number; output: number } }>();
+// ⚠️ All cache & metrics variables now in metricsTracker.ts
+// Access via: metrics.localCache, metrics.calculationCache, metrics.totalTokensUsed, metrics.requestTimings
 
-// Calculation cache to avoid redundant eligibility calculations
-const calculationCache = new Map<string, number>();
-
-// Token usage tracking per session
-let totalTokensUsed = { input: 0, output: 0, requests: 0 };
-
-// Performance timing tracking
-let requestTimings = {
-  totalTime: 0,
-  apiTime: 0,
-  requestCount: 0,
-  cacheHits: 0,
-  cacheMisses: 0,
-  times: [] as { timestamp: number; duration: number; type: 'cache' | 'api' }[]
-};
-
-export function clearAICache() {
-  localCache.clear();
-  calculationCache.clear();
-  totalTokensUsed = { input: 0, output: 0, requests: 0 };
-  requestTimings = { totalTime: 0, apiTime: 0, requestCount: 0, cacheHits: 0, cacheMisses: 0, times: [] };
-  console.log('INFO: AI Cache and calculations cleared. Token tracking and timings reset.');
-}
-
-export function getAICacheData() {
-  const cacheData: Record<string, any> = {};
-  localCache.forEach((value, key) => {
-    cacheData[key] = {
-      responseLength: value.response.text?.length || 0,
-      tokens: value.tokens,
-      cachedAt: new Date(value.timestamp).toISOString()
-    };
-  });
-  return cacheData;
-}
-
-export function viewAICache() {
-  const cacheData = getAICacheData();
-  console.log('📦 AI CACHE CONTENTS:', cacheData);
-  console.log(`📊 Total cached items: ${localCache.size}`);
-  console.log(`📊 Total tokens used (session): Input=${totalTokensUsed.input}, Output=${totalTokensUsed.output}, Requests=${totalTokensUsed.requests}`);
-  return cacheData;
-}
-
-// Get token usage statistics 
-export function getTokenUsageStats() {
-  return {
-    totalInput: totalTokensUsed.input,
-    totalOutput: totalTokensUsed.output,
-    totalRequests: totalTokensUsed.requests,
-    averageInputPerRequest: totalTokensUsed.requests > 0 ? Math.round(totalTokensUsed.input / totalTokensUsed.requests) : 0,
-    averageOutputPerRequest: totalTokensUsed.requests > 0 ? Math.round(totalTokensUsed.output / totalTokensUsed.requests) : 0,
-    cacheHitRate: totalTokensUsed.requests > 0 ? Math.round((requestTimings.cacheHits / totalTokensUsed.requests) * 100) : 0
-  };
-}
-
-// Get performance timing statistics
-export function getPerformanceStats() {
-  const avgTime = requestTimings.requestCount > 0 ? Math.round(requestTimings.totalTime / requestTimings.requestCount) : 0;
-  const cacheHitRate = requestTimings.requestCount > 0 ? Math.round((requestTimings.cacheHits / requestTimings.requestCount) * 100) : 0;
-  const avgApiTime = requestTimings.apiTime > 0 ? Math.round(requestTimings.apiTime / (requestTimings.requestCount - requestTimings.cacheHits || 1)) : 0;
-  
-  return {
-    averageRequestTime: avgTime,
-    averageApiTime: avgApiTime,
-    totalRequests: requestTimings.requestCount,
-    cacheHits: requestTimings.cacheHits,
-    cacheMisses: requestTimings.cacheMisses,
-    cacheHitRate: cacheHitRate,
-    recentTimes: requestTimings.times.slice(-10) // Last 10 requests
-  };
-}
+// ✅ All cache functions now exported from metricsTracker.ts
+// Re-export for backward compatibility
+export const clearAICache = () => metrics.clearAICache();
+export const getAICacheData = () => metrics.getAICacheData();
+export const viewAICache = () => metrics.viewAICache();
+export const getTokenUsageStats = () => metrics.getTokenUsageStats();
+export const getPerformanceStats = () => metrics.getPerformanceStats();
 
 export async function getAIResponse(
   messages: ChatMessage[], 
@@ -134,8 +72,8 @@ export async function getAIResponse(
   const CACHE_TTL_MS = 1800000; // 30 minutes
   
   // Check if we have a cached response that's still fresh
-  if (localCache.has(messageHash)) {
-    const cached = localCache.get(messageHash);
+  if (metrics.localCache.has(messageHash)) {
+    const cached = metrics.localCache.get(messageHash);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       const cacheResponseTime = performance.now() - requestStartTime;
       console.log(`✅ CACHE HIT: Found response for message hash "${messageHash}"`);
@@ -143,10 +81,7 @@ export async function getAIResponse(
       console.log(`⏱️ CACHE TIME: ${(cacheResponseTime / 1000).toFixed(3)}s`);
       
       // Update timing metrics
-      requestTimings.cacheHits += 1;
-      requestTimings.requestCount += 1;
-      requestTimings.totalTime += cacheResponseTime;
-      requestTimings.times.push({ timestamp: Date.now(), duration: cacheResponseTime, type: 'cache' });
+      metrics.recordCacheHit(cacheResponseTime);
       
       // Return cached response with timing data
       return { 
@@ -156,11 +91,11 @@ export async function getAIResponse(
       };
     } else if (cached) {
       // Remove expired cache entry
-      localCache.delete(messageHash);
+      metrics.localCache.delete(messageHash);
     }
   }
   
-  requestTimings.cacheMisses += 1;
+  metrics.recordCacheMiss();
   console.log(`🔄 CACHE MISS: Processing new request for message hash "${messageHash}"`);
 
   // Keyword filter and sorting to keep prompt tiny
@@ -326,8 +261,8 @@ export async function getAIResponse(
     // Cache key: bankId + income + EMIs (these are the only factors that matter)
     const cacheKey = `eligibility_${offer.id}_${tempSalary}_${profile.existingEMIs || 0}`;
     
-    if (calculationCache.has(cacheKey)) {
-      return calculationCache.get(cacheKey)!;
+    if (metrics.calculationCache.has(cacheKey)) {
+      return metrics.calculationCache.get(cacheKey)!;
     }
     
     const income = tempSalary;
@@ -339,13 +274,13 @@ export async function getAIResponse(
     const foir = 0.5; // 50% FOIR
     const availableEMI = (income * foir) - emis;
     if (availableEMI <= 0) {
-      calculationCache.set(cacheKey, 0);
+      metrics.calculationCache.set(cacheKey, 0);
       return 0;
     }
 
     const monthlyRate = rate / 12 / 100;
     if (monthlyRate === 0) {
-      calculationCache.set(cacheKey, bankMax);
+      metrics.calculationCache.set(cacheKey, bankMax);
       return bankMax;
     }
 
@@ -354,7 +289,7 @@ export async function getAIResponse(
     const result = Math.min(Math.round(maxLoan), bankMax);
     
     // Store in cache for next use
-    calculationCache.set(cacheKey, result);
+    metrics.calculationCache.set(cacheKey, result);
     return result;
   };
 
@@ -562,7 +497,7 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
     // DEBUG: Log input to Gemini
     console.log('🔵 GEMINI INPUT - User Message:', lastMsg);
     console.log('🔵 GEMINI INPUT - Banks Being Sent (finalOffers):', finalOffers.map(o => ({ name: o.bankName, rate: o.minInterestRate, score: o.score })));
-    console.log('🔵 GEMINI INPUT - Calculation cache size:', calculationCache.size);
+    console.log('🔵 GEMINI INPUT - Calculation cache size:', metrics.calculationCache.size);
     
     // Measure API call time
     const apiStartTime = performance.now();
@@ -604,35 +539,17 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
     };
     
     // Update session token count
-    totalTokensUsed.input += tokensUsed.input;
-    totalTokensUsed.output += tokensUsed.output;
-    totalTokensUsed.requests += 1;
+    metrics.recordTokenUsage(tokensUsed.input, tokensUsed.output);
     
     // Calculate total request time
     const requestEndTime = performance.now();
     const totalRequestTime = requestEndTime - requestStartTime;
     
     // Update performance metrics
-    requestTimings.apiTime += apiDuration;
-    requestTimings.totalTime += totalRequestTime;
-    requestTimings.requestCount += 1;
-    requestTimings.times.push({ timestamp: Date.now(), duration: totalRequestTime, type: 'api' });
+    metrics.recordAPITiming(apiDuration, totalRequestTime);
     
-    // Calculate average metrics
-    const avgTokensPerRequest = Math.round(totalTokensUsed.input / totalTokensUsed.requests);
-    const estimatedCostCents = ((tokensUsed.input / 1000) * 0.075 + (tokensUsed.output / 1000) * 0.3) * 100; // Gemini pricing
-    
-    // 🎯 COMPREHENSIVE PERFORMANCE LOG
-    console.log('\n' + '='.repeat(80));
-    console.log('📊 REQUEST PERFORMANCE SUMMARY');
-    console.log('='.repeat(80));
-    console.log(`⏱️  API TIME: ${(apiDuration / 1000).toFixed(2)}s`);
-    console.log(`⏱️  TOTAL TIME: ${(totalRequestTime / 1000).toFixed(2)}s`);
-    console.log(`💰 TOKENS (This): Input=${tokensUsed.input} | Output=${tokensUsed.output} | Total=${tokensUsed.input + tokensUsed.output}`);
-    console.log(`💰 TOKENS (Session): Total Input=${totalTokensUsed.input} | Output=${totalTokensUsed.output} | Requests=${totalTokensUsed.requests}`);
-    console.log(`💵 COST (This Request): $${(estimatedCostCents / 100).toFixed(4)}`);
-    console.log(`📈 EFFICIENCY: Avg ${avgTokensPerRequest} tokens/req | Cache Hit Rate: ${requestTimings.cacheHits}/${requestTimings.requestCount} (${Math.round((requestTimings.cacheHits / requestTimings.requestCount) * 100)}%)`);
-    console.log('='.repeat(80) + '\n');
+    // Log comprehensive metrics (can be disabled by commenting out metrics import)
+    metrics.logPerformanceMetrics(apiDuration, totalRequestTime, tokensUsed.input, tokensUsed.output, false);
     
     const aiRes = { 
       text: result.text || "I've processed your request.", 
@@ -643,7 +560,7 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
     };
     
     // Save to cache with token and timing metadata
-    localCache.set(messageHash, {
+    metrics.localCache.set(messageHash, {
       response: aiRes,
       timestamp: Date.now(),
       tokens: tokensUsed
