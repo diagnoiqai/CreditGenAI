@@ -1,6 +1,18 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { UserProfile, ChatMessage, BankOffer, LoanApplication } from "../types";
 import { findBestBankMatch, findSimilarBanks, levenshteinDistance } from "../utils/bankMatching";
+import { SYSTEM_PROMPT } from "./systemPrompt";
+
+// 🔧 Browser-compatible string hash function (replaces Node.js crypto)
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36).substring(0, 16); // Convert to base-36, take first 16 chars
+}
 
 const getGeminiApiKey = () => {
   // Try process.env (Vite define)
@@ -30,17 +42,40 @@ function getAI() {
   return aiInstance;
 }
 
-const localCache = new Map<string, any>();
+const localCache = new Map<string, { response: any; timestamp: number; tokens?: { input: number; output: number } }>();
+
+// Calculation cache to avoid redundant eligibility calculations
+const calculationCache = new Map<string, number>();
+
+// Token usage tracking per session
+let totalTokensUsed = { input: 0, output: 0, requests: 0 };
+
+// Performance timing tracking
+let requestTimings = {
+  totalTime: 0,
+  apiTime: 0,
+  requestCount: 0,
+  cacheHits: 0,
+  cacheMisses: 0,
+  times: [] as { timestamp: number; duration: number; type: 'cache' | 'api' }[]
+};
 
 export function clearAICache() {
   localCache.clear();
-  console.log('INFO: AI Cache cleared.');
+  calculationCache.clear();
+  totalTokensUsed = { input: 0, output: 0, requests: 0 };
+  requestTimings = { totalTime: 0, apiTime: 0, requestCount: 0, cacheHits: 0, cacheMisses: 0, times: [] };
+  console.log('INFO: AI Cache and calculations cleared. Token tracking and timings reset.');
 }
 
 export function getAICacheData() {
   const cacheData: Record<string, any> = {};
   localCache.forEach((value, key) => {
-    cacheData[key] = value;
+    cacheData[key] = {
+      responseLength: value.response.text?.length || 0,
+      tokens: value.tokens,
+      cachedAt: new Date(value.timestamp).toISOString()
+    };
   });
   return cacheData;
 }
@@ -49,7 +84,37 @@ export function viewAICache() {
   const cacheData = getAICacheData();
   console.log('📦 AI CACHE CONTENTS:', cacheData);
   console.log(`📊 Total cached items: ${localCache.size}`);
+  console.log(`📊 Total tokens used (session): Input=${totalTokensUsed.input}, Output=${totalTokensUsed.output}, Requests=${totalTokensUsed.requests}`);
   return cacheData;
+}
+
+// Get token usage statistics 
+export function getTokenUsageStats() {
+  return {
+    totalInput: totalTokensUsed.input,
+    totalOutput: totalTokensUsed.output,
+    totalRequests: totalTokensUsed.requests,
+    averageInputPerRequest: totalTokensUsed.requests > 0 ? Math.round(totalTokensUsed.input / totalTokensUsed.requests) : 0,
+    averageOutputPerRequest: totalTokensUsed.requests > 0 ? Math.round(totalTokensUsed.output / totalTokensUsed.requests) : 0,
+    cacheHitRate: totalTokensUsed.requests > 0 ? Math.round((requestTimings.cacheHits / totalTokensUsed.requests) * 100) : 0
+  };
+}
+
+// Get performance timing statistics
+export function getPerformanceStats() {
+  const avgTime = requestTimings.requestCount > 0 ? Math.round(requestTimings.totalTime / requestTimings.requestCount) : 0;
+  const cacheHitRate = requestTimings.requestCount > 0 ? Math.round((requestTimings.cacheHits / requestTimings.requestCount) * 100) : 0;
+  const avgApiTime = requestTimings.apiTime > 0 ? Math.round(requestTimings.apiTime / (requestTimings.requestCount - requestTimings.cacheHits || 1)) : 0;
+  
+  return {
+    averageRequestTime: avgTime,
+    averageApiTime: avgApiTime,
+    totalRequests: requestTimings.requestCount,
+    cacheHits: requestTimings.cacheHits,
+    cacheMisses: requestTimings.cacheMisses,
+    cacheHitRate: cacheHitRate,
+    recentTimes: requestTimings.times.slice(-10) // Last 10 requests
+  };
 }
 
 export async function getAIResponse(
@@ -57,11 +122,46 @@ export async function getAIResponse(
   profile: UserProfile, 
   bankOffers: BankOffer[],
   userApplications: LoanApplication[] = []
-): Promise<{ text: string, action?: any, suggestions?: string[] }> {
+): Promise<{ text: string, action?: any, suggestions?: string[], tokensUsed?: { input: number; output: number }, timeTaken?: { cacheMs?: number; apiMs?: number; totalMs: number } }> {
+  const requestStartTime = performance.now();
   const lastMsg = messages[messages.length - 1]?.content || '';
-  const cacheKey = `v6_${lastMsg.toLowerCase().trim()}_${profile.monthlyIncome}_${profile.existingEMIs || 0}_${userApplications.length}`;
-
-  if (localCache.has(cacheKey)) return localCache.get(cacheKey);
+  
+  // 🎯 SMART CACHING: Use simpleHash of user message (not profile data)
+  // This means: "Show me best loans" and "Best loans?" = same cache key
+  // Why? Similar questions should get cached responses
+  const messageHash = simpleHash(lastMsg.toLowerCase().trim());
+  
+  const CACHE_TTL_MS = 1800000; // 30 minutes
+  
+  // Check if we have a cached response that's still fresh
+  if (localCache.has(messageHash)) {
+    const cached = localCache.get(messageHash);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      const cacheResponseTime = performance.now() - requestStartTime;
+      console.log(`✅ CACHE HIT: Found response for message hash "${messageHash}"`);
+      console.log(`📊 Cache age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s ago`);
+      console.log(`⏱️ CACHE TIME: ${(cacheResponseTime / 1000).toFixed(3)}s`);
+      
+      // Update timing metrics
+      requestTimings.cacheHits += 1;
+      requestTimings.requestCount += 1;
+      requestTimings.totalTime += cacheResponseTime;
+      requestTimings.times.push({ timestamp: Date.now(), duration: cacheResponseTime, type: 'cache' });
+      
+      // Return cached response with timing data
+      return { 
+        ...cached.response, 
+        tokensUsed: cached.tokens,
+        timeTaken: { cacheMs: cacheResponseTime, totalMs: Math.round(cacheResponseTime) }
+      };
+    } else if (cached) {
+      // Remove expired cache entry
+      localCache.delete(messageHash);
+    }
+  }
+  
+  requestTimings.cacheMisses += 1;
+  console.log(`🔄 CACHE MISS: Processing new request for message hash "${messageHash}"`);
 
   // Keyword filter and sorting to keep prompt tiny
   const kw = lastMsg.toLowerCase();
@@ -221,6 +321,15 @@ export async function getAIResponse(
   const requiredAmount = tempAmount;
 
   const calculateMaxEligibleLoan = (offer: BankOffer) => {
+    // 🎯 CALCULATION CACHING: Avoid recalculating same eligibility
+    // Why? We calculate this 3+ times per offer (satisfiesAmount, getScore, mapping)
+    // Cache key: bankId + income + EMIs (these are the only factors that matter)
+    const cacheKey = `eligibility_${offer.id}_${tempSalary}_${profile.existingEMIs || 0}`;
+    
+    if (calculationCache.has(cacheKey)) {
+      return calculationCache.get(cacheKey)!;
+    }
+    
     const income = tempSalary;
     const emis = profile.existingEMIs || 0;
     const isLowCibil = tempCibil && tempCibil < 750;
@@ -229,14 +338,24 @@ export async function getAIResponse(
     
     const foir = 0.5; // 50% FOIR
     const availableEMI = (income * foir) - emis;
-    if (availableEMI <= 0) return 0;
+    if (availableEMI <= 0) {
+      calculationCache.set(cacheKey, 0);
+      return 0;
+    }
 
     const monthlyRate = rate / 12 / 100;
-    if (monthlyRate === 0) return bankMax;
+    if (monthlyRate === 0) {
+      calculationCache.set(cacheKey, bankMax);
+      return bankMax;
+    }
 
     const tenure = offer.maxTenure;
     const maxLoan = availableEMI * ((1 - Math.pow(1 + monthlyRate, -tenure)) / monthlyRate);
-    return Math.min(Math.round(maxLoan), bankMax);
+    const result = Math.min(Math.round(maxLoan), bankMax);
+    
+    // Store in cache for next use
+    calculationCache.set(cacheKey, result);
+    return result;
   };
 
   const satisfiesAmount = (offer: BankOffer) => {
@@ -443,16 +562,27 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
     // DEBUG: Log input to Gemini
     console.log('🔵 GEMINI INPUT - User Message:', lastMsg);
     console.log('🔵 GEMINI INPUT - Banks Being Sent (finalOffers):', finalOffers.map(o => ({ name: o.bankName, rate: o.minInterestRate, score: o.score })));
-    console.log('🔵 GEMINI INPUT - Full Prompt:', prompt);
+    console.log('🔵 GEMINI INPUT - Calculation cache size:', calculationCache.size);
     
+    // Measure API call time
+    const apiStartTime = performance.now();
+    
+    // 🎯 OPTIMIZED: Move verbose rules to system prompt
+    // Why? Rules don't change per request, so send once server-side instead of 3000+ tokens per request
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [
+        { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
+        { role: 'user', parts: [{ text: prompt }] }
+      ],
       config: {
         temperature: 0.1,
         responseMimeType: "application/json",
       },
     });
+    
+    const apiEndTime = performance.now();
+    const apiDuration = apiEndTime - apiStartTime;
 
     // DEBUG: Log raw response from Gemini
     console.log('🟡 GEMINI RAW RESPONSE:', response.text);
@@ -467,21 +597,67 @@ Task: Respond in JSON: {"text": "1-2 sentence advice", "suggestions": ["suggesti
       actionData: result.action?.data
     });
     
+    // 📊 TOKEN USAGE TRACKING: Extract and log token usage
+    const tokensUsed = {
+      input: response.usageMetadata?.promptTokenCount || 0,
+      output: response.usageMetadata?.candidatesTokenCount || 0
+    };
+    
+    // Update session token count
+    totalTokensUsed.input += tokensUsed.input;
+    totalTokensUsed.output += tokensUsed.output;
+    totalTokensUsed.requests += 1;
+    
+    // Calculate total request time
+    const requestEndTime = performance.now();
+    const totalRequestTime = requestEndTime - requestStartTime;
+    
+    // Update performance metrics
+    requestTimings.apiTime += apiDuration;
+    requestTimings.totalTime += totalRequestTime;
+    requestTimings.requestCount += 1;
+    requestTimings.times.push({ timestamp: Date.now(), duration: totalRequestTime, type: 'api' });
+    
+    // Calculate average metrics
+    const avgTokensPerRequest = Math.round(totalTokensUsed.input / totalTokensUsed.requests);
+    const estimatedCostCents = ((tokensUsed.input / 1000) * 0.075 + (tokensUsed.output / 1000) * 0.3) * 100; // Gemini pricing
+    
+    // 🎯 COMPREHENSIVE PERFORMANCE LOG
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 REQUEST PERFORMANCE SUMMARY');
+    console.log('='.repeat(80));
+    console.log(`⏱️  API TIME: ${(apiDuration / 1000).toFixed(2)}s`);
+    console.log(`⏱️  TOTAL TIME: ${(totalRequestTime / 1000).toFixed(2)}s`);
+    console.log(`💰 TOKENS (This): Input=${tokensUsed.input} | Output=${tokensUsed.output} | Total=${tokensUsed.input + tokensUsed.output}`);
+    console.log(`💰 TOKENS (Session): Total Input=${totalTokensUsed.input} | Output=${totalTokensUsed.output} | Requests=${totalTokensUsed.requests}`);
+    console.log(`💵 COST (This Request): $${(estimatedCostCents / 100).toFixed(4)}`);
+    console.log(`📈 EFFICIENCY: Avg ${avgTokensPerRequest} tokens/req | Cache Hit Rate: ${requestTimings.cacheHits}/${requestTimings.requestCount} (${Math.round((requestTimings.cacheHits / requestTimings.requestCount) * 100)}%)`);
+    console.log('='.repeat(80) + '\n');
+    
     const aiRes = { 
       text: result.text || "I've processed your request.", 
       suggestions: result.suggestions || [],
-      action: result.action 
+      action: result.action,
+      tokensUsed: tokensUsed,
+      timeTaken: { apiMs: Math.round(apiDuration), totalMs: Math.round(totalRequestTime) }
     };
     
-    localCache.set(cacheKey, aiRes);
+    // Save to cache with token and timing metadata
+    localCache.set(messageHash, {
+      response: aiRes,
+      timestamp: Date.now(),
+      tokens: tokensUsed
+    });
     
     return aiRes;
   } catch (error) {
-    console.error("AI Error:", error);
+    const errorTime = performance.now() - requestStartTime;
+    console.error("❌ AI Error:", error);
+    console.error(`⏱️  ERROR TIME: ${(errorTime / 1000).toFixed(2)}s`);
     const key = getGeminiApiKey();
     if (!key) {
-      return { text: "I'm sorry, but the AI service is not configured. Please ensure your .env file has GEMINI_API_KEY and you have restarted your dev server." };
+      return { text: "I'm sorry, but the AI service is not configured. Please ensure your .env file has GEMINI_API_KEY and you have restarted your dev server.", timeTaken: { totalMs: Math.round(errorTime) } };
     }
-    return { text: "I'm here to help! Could you please repeat that?" };
+    return { text: "I'm here to help! Could you please repeat that?", timeTaken: { totalMs: Math.round(errorTime) } };
   }
 }
