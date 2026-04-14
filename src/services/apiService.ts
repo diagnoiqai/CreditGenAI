@@ -394,7 +394,21 @@ export const apiService = {
     try {
       const response = await fetch(`${API_BASE}/admin/leads?limit=${limit}`);
       const data = await handleResponse(response);
-      return data.map((app: any) => ({
+      
+      // ✅ FIX BUG-001: Remove duplicate leads by UID
+      // Backend SQL LEFT JOIN returns multiple rows per user (one per application)
+      // We deduplicate here: keep first entry per user, skip duplicates
+      const seenUids = new Set<string>();
+      const uniqueLeads = data.filter((app: any) => {
+        if (seenUids.has(app.uid)) {
+          console.log(`[BUG-001 FIX] Skipping duplicate lead: ${app.user_name} (UID: ${app.uid})`);
+          return false; // Skip duplicate UID
+        }
+        seenUids.add(app.uid); // Remember this UID
+        return true; // Keep first entry
+      });
+
+      return uniqueLeads.map((app: any) => ({
         id: app.id,
         uid: app.uid,
         bankId: app.bank_id,
