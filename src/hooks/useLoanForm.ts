@@ -10,6 +10,7 @@ export function useLoanForm({ onComplete, initialProfile }: UseLoanFormProps) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<UserProfile>>({
+    age: initialProfile?.age || 18,
     employmentType: initialProfile?.employmentType || 'Salaried',
     companyType: initialProfile?.companyType || 'MNC',
     existingEMIs: initialProfile?.existingEMIs || 0,
