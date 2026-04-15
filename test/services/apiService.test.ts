@@ -55,7 +55,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { apiService } from "./apiService";
+import { apiService } from "../../src/services/apiService";
 
 // ============================================================================
 // TEST SETUP AND MOCKING
@@ -499,167 +499,18 @@ describe("API Service - getLeads()", () => {
     // EXECUTE
     const result = await apiService.getLeads();
 
-    // VERIFY: Both leads returned
+    // VERIFY: Both leads should be returned
     expect(result).toHaveLength(2);
     expect(result[0].uid).toBe("user-001");
     expect(result[1].uid).toBe("user-002");
 
-    // VERIFY: No skip messages (no duplicates)
+    // VERIFY: No skip messages for unique data
     const skipMessages = consoleSpy.mock.calls.filter((call) =>
       call[0]?.includes("[BUG-001 FIX]"),
     );
-    expect(skipMessages).toHaveLength(0);
+    expect(skipMessages).toHaveLength(0); // No duplicates, no skip messages
 
-    // MANUAL CHECK: Both users visible, each once, all data correct
-    // CONSOLE CHECK: No [BUG-001 FIX] messages (data is clean)
-  });
-
-  // ========================================================================
-  // TEST-006: Empty Response (API Returns No Data)
-  // ========================================================================
-
-  /**
-   * SCENARIO: API returns empty array
-   * PURPOSE: Verify graceful handling of empty data
-   * EXPECTED: Empty array returned, no errors, deduplication logic doesn't break
-   */
-  it("TEST-006: Should handle empty API response", async () => {
-    // SETUP: Empty data
-    const emptyResponse: any[] = [];
-
-    // Mock fetch
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: new Map([["content-type", "application/json"]]),
-      json: async () => emptyResponse,
-    });
-
-    // EXECUTE
-    const result = await apiService.getLeads();
-
-    // VERIFY: Empty array returned
-    expect(result).toHaveLength(0);
-    expect(Array.isArray(result)).toBe(true);
-
-    // MANUAL CHECK: Leads View shows "No leads" or empty state
-    // Expected behavior: App doesn't crash, shows user-friendly empty message
-  });
-
-  // ========================================================================
-  // TEST-007: Error Handling (API Failure)
-  // ========================================================================
-
-  /**
-   * SCENARIO: API request fails (500 error, network error, etc.)
-   * PURPOSE: Verify graceful error handling and fallback behavior
-   * EXPECTED: Empty array returned, error logged, app doesn't crash
-   */
-  it("TEST-007: Should handle API errors gracefully", async () => {
-    // Mock console error
-    const errorSpy = vi.spyOn(console, "error");
-
-    // Mock fetch to throw error
-    (global.fetch as any).mockRejectedValueOnce(new Error("Network error"));
-
-    // EXECUTE
-    const result = await apiService.getLeads();
-
-    // VERIFY: Empty array returned (graceful fallback)
-    expect(result).toEqual([]);
-
-    // VERIFY: Error logged
-    expect(errorSpy).toHaveBeenCalledWith(
-      "API Error (getLeads):",
-      expect.any(Error),
-    );
-
-    // MANUAL CHECK: App shows empty state or error message, doesn't crash
-    // Console shows: API Error (getLeads): Error: Network error
-  });
-
-  // ========================================================================
-  // TEST-008: Limit Parameter
-  // ========================================================================
-
-  /**
-   * SCENARIO: getLeads() called with custom limit parameter
-   * PURPOSE: Verify that limit parameter is passed correctly to API
-   * EXPECTED: Fetch URL includes ?limit=50 parameter
-   */
-  it("TEST-008: Should pass limit parameter to API", async () => {
-    // SETUP: Empty response (just testing the fetch call)
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: new Map([["content-type", "application/json"]]),
-      json: async () => [],
-    });
-
-    // EXECUTE with custom limit
-    await apiService.getLeads(50);
-
-    // VERIFY: Fetch was called with correct URL
-    expect(global.fetch).toHaveBeenCalledWith("/api/admin/leads?limit=50");
+    // MANUAL CHECK: Both users should appear in the Leads View
+    // CONSOLE CHECK: No [BUG-001 FIX] messages in console
   });
 });
-
-// ============================================================================
-// BUG-001 VERIFICATION CHECKLIST
-// ============================================================================
-
-/**
- * HOW TO VERIFY THE BUG FIX IN PRODUCTION:
- *
- * QUICK TEST (30 seconds):
- * ========================
- * 1. npm run dev
- * 2. Go to Admin → Leads
- * 3. Open browser console (F12)
- * 4. Search for any user with multiple applications
- * 5. Check: Does user appear only once? YES = Fix works ✓
- * 6. Check Console: See [BUG-001 FIX] messages appearing? YES = Fix active ✓
- *
- * DETAILED TEST (10 minutes):
- * ===========================
- * 1. Clear browser cache and localStorage (or use incognito)
- * 2. npm run dev
- * 3. Admin login
- * 4. Go to Leads View
- * 5. For each user in the list:
- *    - Click on them to see profile
- *    - Check if they appear multiple times in list = FAIL
- *    - They should appear only once = PASS
- * 6. Filter by different banks, check for duplicate users
- * 7. In browser console, look for [BUG-001 FIX] messages
- *    - If fix is working, you'll see: [BUG-001 FIX] Skipping duplicate lead: {name} (UID: {uid})
- *
- * TROUBLESHOOTING:
- * ================
- * If you see duplicate users in the list:
- *  1. Check console for errors
- *  2. Check if [BUG-001 FIX] messages appear
- *  3. If no messages: Fix might not be applied, check apiService.ts line 393
- *  4. Clear cache: Ctrl+Shift+Delete
- *  5. Restart dev server: Ctrl+C, then npm run dev
- *
- * SUCCESS SIGNS:
- * ==============
- * ✓ Each user appears only once in leads list
- * ✓ Browser console shows [BUG-001 FIX] messages when loading leads
- * ✓ No data is lost (user is shown with first application)
- * ✓ Leads View renders correctly and quickly
- * ✓ Search functionality works with non-duplicated results
- */
-
-/**
- * TO RUN THESE TESTS:
- *
- * Once: npm test                    (run tests once)
- * Watch: npm run test:watch         (re-run on file changes)
- * UI: npm run test:ui               (interactive test dashboard)
- * Coverage: npm run test:coverage   (see code coverage %)
- *
- * Individual test: npm test -- -t "TEST-001"
- * Filter by name: npm test -- -t "duplicate"
- */

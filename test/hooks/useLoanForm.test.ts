@@ -27,7 +27,7 @@
 
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useLoanForm } from './useLoanForm';
+import { useLoanForm } from '../../src/hooks/useLoanForm';
 
 const mockOnComplete = (profile: any) => {};
 

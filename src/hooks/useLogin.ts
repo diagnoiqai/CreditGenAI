@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { apiService } from '../services/apiService';
 
 export function useLogin() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -84,6 +85,13 @@ export function useLogin() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate displayName for signup
+    if (isSignUp && !displayName.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -91,6 +99,31 @@ export function useLogin() {
       if (isSignUp) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(userCredential.user, { displayName });
+        
+        // Save user profile to PostgreSQL database
+        const profileSaved = await apiService.saveUserProfile({
+          uid: userCredential.user.uid,
+          email: userCredential.user.email || email,
+          displayName: displayName.trim(),
+          monthlyIncome: 0,
+          employmentType: 'Salaried',
+          companyType: 'Other',
+          companyName: '',
+          workExperience: '',
+          totalExperience: '',
+          city: '',
+          existingEMIs: 0,
+          age: 25,
+          gender: 'Male',
+          maritalStatus: 'Single',
+          cibilScore: 750,
+          loanAmountRequired: 0,
+          loanType: 'Personal Loan'
+        });
+        
+        if (!profileSaved) {
+          console.warn('Failed to save profile to database, but Firebase auth succeeded');
+        }
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
