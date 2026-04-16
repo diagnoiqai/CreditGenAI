@@ -103,8 +103,23 @@ router.delete('/bank-offers/:id', async (req, res) => {
 
 // Admin: Leads
 router.get('/leads', async (req, res) => {
-  const limit = req.query.limit || 100;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 20));
+  const offset = (page - 1) * pageSize;
+
   try {
+    // Get total count first
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM dev.users u
+      LEFT JOIN dev.applications a ON u.uid = a.uid
+      WHERE u.role = 'user'
+    `;
+    const countResult = await pool.query(countQuery);
+    const totalCount = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    // Get paginated data
     const query = `
       WITH lead_attachments AS (
         SELECT application_id, 
@@ -141,26 +156,35 @@ router.get('/leads', async (req, res) => {
       LEFT JOIN lead_attachments la ON a.id::text = la.application_id::text
       WHERE u.role = 'user'
       ORDER BY created_at DESC
-      LIMIT $1::integer
+      LIMIT $1::integer OFFSET $2::integer
     `;
-    const result = await pool.query(query, [limit]);
-    res.json(result.rows.map(row => ({
-      id: row.id || `user-${row.uid}`,
-      uid: row.uid,
-      user_name: row.user_name,
-      user_email: row.user_email,
-      user_mobile: row.user_mobile,
-      bank_id: row.bank_id,
-      bank_name: row.bank_name || 'No Bank Selected',
-      loan_type: row.loan_type,
-      loan_amount: row.loan_amount,
-      status: row.status,
-      sub_status: row.sub_status,
-      status_notes: row.status_notes,
-      rejection_reason: row.rejection_reason,
-      created_at: row.created_at,
-      attachments: row.attachments
-    })));
+    const result = await pool.query(query, [pageSize, offset]);
+
+    res.json({
+      data: result.rows.map(row => ({
+        id: row.id || `user-${row.uid}`,
+        uid: row.uid,
+        user_name: row.user_name,
+        user_email: row.user_email,
+        user_mobile: row.user_mobile,
+        bank_id: row.bank_id,
+        bank_name: row.bank_name || 'No Bank Selected',
+        loan_type: row.loan_type,
+        loan_amount: row.loan_amount,
+        status: row.status,
+        sub_status: row.sub_status,
+        status_notes: row.status_notes,
+        rejection_reason: row.rejection_reason,
+        created_at: row.created_at,
+        attachments: row.attachments
+      })),
+      pagination: {
+        totalCount,
+        page,
+        pageSize,
+        totalPages
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch leads' });
@@ -170,17 +194,17 @@ router.get('/leads', async (req, res) => {
 router.patch('/leads/:id/status', async (req, res) => {
   const { status, rejectionReason, subStatus, statusNotes, updatedBy } = req.body;
   const leadId = req.params.id;
-  
+
   try {
     let applicationId: any;
-    
+
     if (leadId.startsWith('user-')) {
       const uid = leadId.replace('user-', '');
       const userResult = await pool.query('SELECT * FROM dev.users WHERE uid = $1::text', [uid]);
       if (userResult.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       const user = userResult.rows[0];
       const insertResult = await pool.query(
         `INSERT INTO dev.applications 
@@ -188,8 +212,8 @@ router.patch('/leads/:id/status', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
          RETURNING id`,
         [
-          uid, user.display_name || null, user.email || null, user.mobile || null, 
-          user.loan_type || 'Personal Loan', user.loan_amount_required || 0, 
+          uid, user.display_name || null, user.email || null, user.mobile || null,
+          user.loan_type || 'Personal Loan', user.loan_amount_required || 0,
           status, subStatus || null, statusNotes || null, rejectionReason || null,
           'manual', 'Manual Entry'
         ]
@@ -202,7 +226,7 @@ router.patch('/leads/:id/status', async (req, res) => {
         [status, rejectionReason, subStatus, statusNotes, applicationId]
       );
     }
-    
+
     await pool.query(
       'INSERT INTO dev.application_history (application_id, status, sub_status, status_notes, rejection_reason, updated_by) VALUES ($1::text, $2, $3, $4, $5, $6)',
       [applicationId, status, subStatus, statusNotes, rejectionReason, updatedBy]
@@ -212,7 +236,7 @@ router.patch('/leads/:id/status', async (req, res) => {
     const appResult = await pool.query('SELECT * FROM dev.applications WHERE id = $1::text', [applicationId]);
     if (appResult.rows.length > 0) {
       const app = appResult.rows[0];
-      
+
       // WhatsApp
       if (app.user_mobile) {
         let messageBody = `Hello ${app.user_name},\n\nYour loan application for ${app.bank_name || 'your chosen bank'} has been updated.\n\nNew Status: *${status}*\n${subStatus ? `Update: ${subStatus}` : ''}\n\nYou can check more details in your dashboard.`;
@@ -268,10 +292,28 @@ router.get('/leads/:id/history', async (req, res) => {
 
 // Admin: Users
 router.get('/users', async (req, res) => {
-  const limit = req.query.limit || 200;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 20));
+  const offset = (page - 1) * pageSize;
+
   try {
-    const result = await pool.query('SELECT * FROM dev.users LIMIT $1::integer', [limit]);
-    res.json(result.rows);
+    // Get total count
+    const countResult = await pool.query('SELECT COUNT(*) as total FROM dev.users');
+    const totalCount = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    // Get paginated data
+    const result = await pool.query('SELECT * FROM dev.users ORDER BY created_at DESC LIMIT $1::integer OFFSET $2::integer', [pageSize, offset]);
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        totalCount,
+        page,
+        pageSize,
+        totalPages
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch users' });
@@ -359,7 +401,7 @@ router.get('/analytics', async (req, res) => {
     const leadsResult = await pool.query('SELECT status, COUNT(*) FROM dev.applications GROUP BY status');
     const usersResult = await pool.query('SELECT COUNT(*) FROM dev.users WHERE role = \'user\' OR role IS NULL');
     const banksResult = await pool.query('SELECT COUNT(*) FROM dev.bank_offers');
-    
+
     const leadsByStatus: Record<string, number> = {};
     leadsResult.rows.forEach(row => {
       leadsByStatus[row.status] = parseInt(row.count);
@@ -410,8 +452,9 @@ router.get('/usage/debug', async (req, res) => {
       WHERE table_schema = 'dev' AND table_name = 'token_usage'
     `);
     res.json(cols.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: err.message });  // ✅ Now safe
   }
 });
 
@@ -467,7 +510,7 @@ router.post('/suggestions/upload', async (req, res) => {
     for (const item of suggestions) {
       const { label, embedding } = item;
       const vectorStr = `[${embedding.join(',')}]`;
-      
+
       await pool.query(
         `INSERT INTO dev.dynamic_suggestions (label, embedding) 
          VALUES ($1, $2::vector) 

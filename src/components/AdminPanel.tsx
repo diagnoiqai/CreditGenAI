@@ -114,8 +114,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, onLogout 
                 setDetailsForm={admin.setDetailsForm}
                 setRejectionModal={admin.setRejectionModal}
                 fetchHistory={admin.fetchHistory}
-                leadsLimit={admin.leadsLimit}
-                setLeadsLimit={admin.setLeadsLimit}
+                leadsPage={admin.leadsPage}
+                leadsPagination={admin.leadsPagination}
+                nextLeadsPage={admin.nextLeadsPage}
+                prevLeadsPage={admin.prevLeadsPage}
+                goToLeadsPage={admin.goToLeadsPage}
               />
             )}
 
@@ -133,8 +136,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ profile, user, onLogout 
                 setEditingUser={admin.setEditingUser}
                 setUserLeadsFilter={admin.setUserLeadsFilter}
                 setActiveView={admin.setActiveView}
-                usersLimit={admin.usersLimit}
-                setUsersLimit={admin.setUsersLimit}
+                usersPage={admin.usersPage}
+                usersPagination={admin.usersPagination}
+                nextUsersPage={admin.nextUsersPage}
+                prevUsersPage={admin.prevUsersPage}
+                goToUsersPage={admin.goToUsersPage}
               />
             )}
 

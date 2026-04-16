@@ -390,16 +390,16 @@ export const apiService = {
   },
 
   // Admin: Leads (Applications)
-  async getLeads(limit: number = 100): Promise<LoanApplication[]> {
+  async getLeads(page: number = 1, pageSize: number = 20): Promise<{data: LoanApplication[], pagination: any}> {
     try {
-      const response = await fetch(`${API_BASE}/admin/leads?limit=${limit}`);
-      const data = await handleResponse(response);
+      const response = await fetch(`${API_BASE}/admin/leads?page=${page}&pageSize=${pageSize}`);
+      const result = await handleResponse(response);
       
       // ✅ FIX BUG-001: Remove duplicate leads by UID
       // Backend SQL LEFT JOIN returns multiple rows per user (one per application)
       // We deduplicate here: keep first entry per user, skip duplicates
       const seenUids = new Set<string>();
-      const uniqueLeads = data.filter((app: any) => {
+      const uniqueLeads = result.data.filter((app: any) => {
         if (seenUids.has(app.uid)) {
           console.log(`[BUG-001 FIX] Skipping duplicate lead: ${app.user_name} (UID: ${app.uid})`);
           return false; // Skip duplicate UID
@@ -408,32 +408,35 @@ export const apiService = {
         return true; // Keep first entry
       });
 
-      return uniqueLeads.map((app: any) => ({
-        id: app.id,
-        uid: app.uid,
-        bankId: app.bank_id,
-        bankName: app.bank_name,
-        loanAmount: Number(app.loan_amount),
-        loanType: app.loan_type,
-        status: app.status,
-        subStatus: app.sub_status,
-        statusNotes: app.status_notes,
-        rejectionReason: app.rejection_reason,
-        timestamp: app.timestamp || app.created_at,
-        userName: app.user_name,
-        userEmail: app.user_email,
-        userMobile: app.user_mobile,
-        attachments: app.attachments?.map((att: any) => ({
-          id: att.id,
-          fileUrl: att.file_url,
-          fileName: att.file_name,
-          fileType: att.file_type,
-          timestamp: att.created_at,
+      return {
+        data: uniqueLeads.map((app: any) => ({
+          id: app.id,
+          uid: app.uid,
+          bankId: app.bank_id,
+          bankName: app.bank_name,
+          loanAmount: Number(app.loan_amount),
+          loanType: app.loan_type,
+          status: app.status,
+          subStatus: app.sub_status,
+          statusNotes: app.status_notes,
+          rejectionReason: app.rejection_reason,
+          timestamp: app.timestamp || app.created_at,
+          userName: app.user_name,
+          userEmail: app.user_email,
+          userMobile: app.user_mobile,
+          attachments: app.attachments?.map((att: any) => ({
+            id: att.id,
+            fileUrl: att.file_url,
+            fileName: att.file_name,
+            fileType: att.file_type,
+            timestamp: att.created_at,
+          })),
         })),
-      }));
+        pagination: result.pagination
+      };
     } catch (error) {
       console.error('API Error (getLeads):', error);
-      return [];
+      return { data: [], pagination: { totalCount: 0, page: 1, pageSize: 20, totalPages: 0 } };
     }
   },
 
@@ -469,37 +472,40 @@ export const apiService = {
   },
 
   // Admin: Users
-  async getUsers(limit: number = 200): Promise<UserProfile[]> {
+  async getUsers(page: number = 1, pageSize: number = 20): Promise<{data: UserProfile[], pagination: any}> {
     try {
-      const response = await fetch(`${API_BASE}/admin/users?limit=${limit}`);
-      const data = await handleResponse(response);
-      return data.map((u: any) => ({
-        uid: u.uid,
-        email: u.email,
-        displayName: u.display_name,
-        monthlyIncome: Number(u.monthly_income),
-        employmentType: u.employment_type,
-        companyType: u.company_type,
-        companyName: u.company_name,
-        workExperience: u.work_experience,
-        totalExperience: u.total_experience,
-        city: u.city,
-        existingEMIs: Number(u.existing_emis),
-        age: u.age,
-        cibilScore: u.cibil_score,
-        mobile: u.mobile,
-        gender: u.gender,
-        maritalStatus: u.marital_status,
-        loanAmountRequired: Number(u.loan_amount_required),
-        loanType: u.loan_type,
-        role: u.role,
-        permissions: u.permissions,
-        createdAt: u.created_at,
-        lastSeen: u.last_seen
-      }));
+      const response = await fetch(`${API_BASE}/admin/users?page=${page}&pageSize=${pageSize}`);
+      const result = await handleResponse(response);
+      return {
+        data: result.data.map((u: any) => ({
+          uid: u.uid,
+          email: u.email,
+          displayName: u.display_name,
+          monthlyIncome: Number(u.monthly_income),
+          employmentType: u.employment_type,
+          companyType: u.company_type,
+          companyName: u.company_name,
+          workExperience: u.work_experience,
+          totalExperience: u.total_experience,
+          city: u.city,
+          existingEMIs: Number(u.existing_emis),
+          age: u.age,
+          cibilScore: u.cibil_score,
+          mobile: u.mobile,
+          gender: u.gender,
+          maritalStatus: u.marital_status,
+          loanAmountRequired: Number(u.loan_amount_required),
+          loanType: u.loan_type,
+          role: u.role,
+          permissions: u.permissions,
+          createdAt: u.created_at,
+          lastSeen: u.last_seen
+        })),
+        pagination: result.pagination
+      };
     } catch (error) {
       console.error('API Error (getUsers):', error);
-      return [];
+      return { data: [], pagination: { totalCount: 0, page: 1, pageSize: 20, totalPages: 0 } };
     }
   },
 

@@ -21,8 +21,12 @@ interface UsersViewProps {
   setEditingUser: (user: UserProfile) => void;
   setUserLeadsFilter: (uid: string) => void;
   setActiveView: (view: AdminView) => void;
-  usersLimit: number;
-  setUsersLimit: (limit: (prev: number) => number) => void;
+  // Pagination props
+  usersPage: number;
+  usersPagination: { totalCount: number; totalPages: number; page: number; pageSize: number };
+  nextUsersPage: () => void;
+  prevUsersPage: () => void;
+  goToUsersPage: (page: number) => void;
 }
 
 export const UsersView: React.FC<UsersViewProps> = ({
@@ -38,8 +42,11 @@ export const UsersView: React.FC<UsersViewProps> = ({
   setEditingUser,
   setUserLeadsFilter,
   setActiveView,
-  usersLimit,
-  setUsersLimit
+  usersPage,
+  usersPagination,
+  nextUsersPage,
+  prevUsersPage,
+  goToUsersPage
 }) => {
   const inputClass = "w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#5A5A40]/20 outline-none transition-all font-sans";
 
@@ -161,14 +168,30 @@ export const UsersView: React.FC<UsersViewProps> = ({
             })}
           </tbody>
         </table>
-        {users.length >= usersLimit && (
-          <div className="p-4 text-center border-t border-gray-50">
-            <button 
-              onClick={() => setUsersLimit(prev => prev + 100)}
-              className="text-sm font-bold text-[#5A5A40] hover:underline"
-            >
-              Load More Users
-            </button>
+        {usersPagination.totalCount > 0 && (
+          <div className="p-4 border-t border-gray-50 flex items-center justify-between bg-gray-50">
+            <div className="text-xs text-gray-600 font-medium">
+              Showing <span className="font-bold">{(usersPage - 1) * usersPagination.pageSize + 1}</span> to <span className="font-bold">{Math.min(usersPage * usersPagination.pageSize, usersPagination.totalCount)}</span> of <span className="font-bold">{usersPagination.totalCount}</span> users
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={prevUsersPage}
+                disabled={usersPage === 1}
+                className="px-3 py-2 text-sm font-semibold text-[#5A5A40] bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+              >
+                ← Previous
+              </button>
+              <div className="px-4 py-2 text-sm font-bold text-[#5A5A40] bg-white border border-gray-200 rounded-lg">
+                Page {usersPage} of {usersPagination.totalPages}
+              </div>
+              <button 
+                onClick={nextUsersPage}
+                disabled={usersPage >= usersPagination.totalPages}
+                className="px-3 py-2 text-sm font-semibold text-[#5A5A40] bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+              >
+                Next →
+              </button>
+            </div>
           </div>
         )}
       </div>

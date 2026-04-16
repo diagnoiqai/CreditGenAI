@@ -13,7 +13,7 @@ interface MessageListProps {
   userApplications: LoanApplication[];
   onApply: (offer: BankOffer) => void;
   onAskAI: (text: string) => void;
-  scrollRef: React.RefObject<HTMLDivElement>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({ 

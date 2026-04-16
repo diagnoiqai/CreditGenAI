@@ -25,8 +25,12 @@ interface LeadsViewProps {
   setDetailsForm: (form: any) => void;
   setRejectionModal: (modal: any) => void;
   fetchHistory: (id: string) => void;
-  leadsLimit: number;
-  setLeadsLimit: (limit: (prev: number) => number) => void;
+  // Pagination props
+  leadsPage: number;
+  leadsPagination: { totalCount: number; totalPages: number; page: number; pageSize: number };
+  nextLeadsPage: () => void;
+  prevLeadsPage: () => void;
+  goToLeadsPage: (page: number) => void;
 }
 
 export const LeadsView: React.FC<LeadsViewProps> = ({
@@ -47,8 +51,11 @@ export const LeadsView: React.FC<LeadsViewProps> = ({
   setDetailsForm,
   setRejectionModal,
   fetchHistory,
-  leadsLimit,
-  setLeadsLimit
+  leadsPage,
+  leadsPagination,
+  nextLeadsPage,
+  prevLeadsPage,
+  goToLeadsPage
 }) => {
   const inputClass = "w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#5A5A40]/20 outline-none transition-all font-sans";
 
@@ -235,14 +242,30 @@ export const LeadsView: React.FC<LeadsViewProps> = ({
             )}
           </tbody>
         </table>
-        {leads.length >= leadsLimit && (
-          <div className="p-4 text-center border-t border-gray-50">
-            <button 
-              onClick={() => setLeadsLimit(prev => prev + 50)}
-              className="text-sm font-bold text-[#5A5A40] hover:underline"
-            >
-              Load More Leads
-            </button>
+        {leadsPagination.totalCount > 0 && (
+          <div className="p-4 border-t border-gray-50 flex items-center justify-between bg-gray-50">
+            <div className="text-xs text-gray-600 font-medium">
+              Showing <span className="font-bold">{(leadsPage - 1) * leadsPagination.pageSize + 1}</span> to <span className="font-bold">{Math.min(leadsPage * leadsPagination.pageSize, leadsPagination.totalCount)}</span> of <span className="font-bold">{leadsPagination.totalCount}</span> leads
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={prevLeadsPage}
+                disabled={leadsPage === 1}
+                className="px-3 py-2 text-sm font-semibold text-[#5A5A40] bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+              >
+                ← Previous
+              </button>
+              <div className="px-4 py-2 text-sm font-bold text-[#5A5A40] bg-white border border-gray-200 rounded-lg">
+                Page {leadsPage} of {leadsPagination.totalPages}
+              </div>
+              <button 
+                onClick={nextLeadsPage}
+                disabled={leadsPage >= leadsPagination.totalPages}
+                className="px-3 py-2 text-sm font-semibold text-[#5A5A40] bg-white border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+              >
+                Next →
+              </button>
+            </div>
           </div>
         )}
       </div>
