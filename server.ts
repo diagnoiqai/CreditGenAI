@@ -3,6 +3,7 @@ import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 // Import modular components
 import { pool } from "./src/config/db.ts";
@@ -24,7 +25,7 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
-  const NODE_ENV = process.env.NODE_ENV || 'development';
+  const NODE_ENV = process.env.NODE_ENV || 'production'; // Default to production since we're built & deployed
   const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'];
 
   // Configure CORS for production
@@ -127,12 +128,20 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // Try multiple possible dist locations
+    let distPath = path.join(process.cwd(), "dist");
+    
+    // On Hostinger, dist might be at root or in build directory
+    if (!fs.existsSync(distPath)) {
+      distPath = path.join(__dirname, "dist");
+    }
+    
     // Serve static files with proper caching headers
     app.use(express.static(distPath, {
       maxAge: '1d',
       etag: false,
     }));
+    
     // SPA fallback - serve index.html for all unmatched routes
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
