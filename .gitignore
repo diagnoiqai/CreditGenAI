@@ -8,6 +8,7 @@ coverage/
 
 # Production
 dist/
+dist-server/
 build/
 
 # Misc
@@ -26,6 +27,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 !.env.example
+!.env.production.example
 
 # IDEs
 .vscode/
