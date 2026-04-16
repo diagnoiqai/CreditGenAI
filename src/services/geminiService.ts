@@ -19,12 +19,16 @@ function simpleHash(str: string): string {
 const getGeminiApiKey = () => {
   // Try process.env (Vite define)
   if (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
-    console.log('Gemini Service: Using API key from process.env.GEMINI_API_KEY');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Gemini Service: Using API key from process.env.GEMINI_API_KEY');
+    }
     return process.env.GEMINI_API_KEY;
   }
   // Try import.meta.env (Vite standard)
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-    console.log('Gemini Service: Using API key from import.meta.env.VITE_GEMINI_API_KEY');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Gemini Service: Using API key from import.meta.env.VITE_GEMINI_API_KEY');
+    }
     return import.meta.env.VITE_GEMINI_API_KEY;
   }
   console.warn('Gemini Service: No API key found in process.env or import.meta.env');

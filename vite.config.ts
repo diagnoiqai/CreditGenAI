@@ -5,10 +5,14 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const isDev = mode === 'development';
   
-  console.log('Vite Config: Loading environment variables for mode:', mode);
-  console.log('Vite Config: GEMINI_API_KEY found:', !!env.GEMINI_API_KEY);
-  console.log('Vite Config: VITE_GEMINI_API_KEY found:', !!env.VITE_GEMINI_API_KEY);
+  // Only log debug info in development
+  if (isDev) {
+    console.log('Vite Config: Loading environment variables for mode:', mode);
+    console.log('Vite Config: GEMINI_API_KEY found:', !!env.GEMINI_API_KEY);
+    console.log('Vite Config: VITE_GEMINI_API_KEY found:', !!env.VITE_GEMINI_API_KEY);
+  }
 
   return {
     plugins: [react(), tailwindcss()],
