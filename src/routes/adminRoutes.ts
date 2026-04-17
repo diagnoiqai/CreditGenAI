@@ -108,9 +108,9 @@ router.get('/leads', async (req, res) => {
   const offset = (page - 1) * pageSize;
 
   try {
-    // Get total count first
+    // Get total count first (using unique UIDs for accurate lead counting)
     const countQuery = `
-      SELECT COUNT(*) as total
+      SELECT COUNT(DISTINCT u.uid) as total
       FROM dev.users u
       LEFT JOIN dev.applications a ON u.uid = a.uid
       WHERE u.role = 'user'
@@ -119,7 +119,7 @@ router.get('/leads', async (req, res) => {
     const totalCount = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // Get paginated data
+    // Get paginated data (one lead per user, most recent activity)
     const query = `
       WITH lead_attachments AS (
         SELECT application_id, 
@@ -134,27 +134,31 @@ router.get('/leads', async (req, res) => {
                ) as attachments
         FROM dev.application_attachments
         GROUP BY application_id
+      ),
+      unique_leads AS (
+        SELECT DISTINCT ON (u.uid)
+          u.uid, 
+          COALESCE(a.user_name, u.display_name) as user_name, 
+          COALESCE(a.user_email, u.email) as user_email, 
+          COALESCE(a.user_mobile, u.mobile) as user_mobile, 
+          a.id, 
+          a.bank_id, 
+          a.bank_name, 
+          COALESCE(a.loan_type, u.loan_type) as loan_type, 
+          COALESCE(a.loan_amount, u.loan_amount_required) as loan_amount, 
+          COALESCE(a.status, 'Interested') as status, 
+          a.sub_status,
+          a.status_notes,
+          a.rejection_reason, 
+          COALESCE(a.created_at, u.created_at) as created_at,
+          COALESCE(la.attachments, '[]') as attachments
+        FROM dev.users u
+        LEFT JOIN dev.applications a ON u.uid = a.uid
+        LEFT JOIN lead_attachments la ON a.id::text = la.application_id::text
+        WHERE u.role = 'user'
+        ORDER BY u.uid, created_at DESC
       )
-      SELECT 
-        u.uid, 
-        COALESCE(a.user_name, u.display_name) as user_name, 
-        COALESCE(a.user_email, u.email) as user_email, 
-        COALESCE(a.user_mobile, u.mobile) as user_mobile, 
-        a.id, 
-        a.bank_id, 
-        a.bank_name, 
-        COALESCE(a.loan_type, u.loan_type) as loan_type, 
-        COALESCE(a.loan_amount, u.loan_amount_required) as loan_amount, 
-        COALESCE(a.status, 'Interested') as status, 
-        a.sub_status,
-        a.status_notes,
-        a.rejection_reason, 
-        COALESCE(a.created_at, u.created_at) as created_at,
-        COALESCE(la.attachments, '[]') as attachments
-      FROM dev.users u
-      LEFT JOIN dev.applications a ON u.uid = a.uid
-      LEFT JOIN lead_attachments la ON a.id::text = la.application_id::text
-      WHERE u.role = 'user'
+      SELECT * FROM unique_leads
       ORDER BY created_at DESC
       LIMIT $1::integer OFFSET $2::integer
     `;

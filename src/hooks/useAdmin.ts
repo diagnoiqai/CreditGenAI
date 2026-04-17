@@ -23,7 +23,7 @@ export const useAdmin = (userProfile: UserProfile | null, user: User | null) => 
   const [analytics, setAnalytics] = useState<any>(null);
   const [usageData, setUsageData] = useState<any>(null);
 
-  // Filters & Pagination
+  // Filters
   const [userLeadsFilter, setUserLeadsFilter] = useState<string | null>(null);
   const [leadsStatusFilter, setLeadsStatusFilter] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
@@ -31,12 +31,11 @@ export const useAdmin = (userProfile: UserProfile | null, user: User | null) => 
   
   // Pagination State
   const [leadsPage, setLeadsPage] = useState(1);
-  const [leadsPageSize] = useState(20);
-  const [leadsPagination, setLeadsPagination] = useState({ totalCount: 0, totalPages: 0, page: 1, pageSize: 20 });
-  
   const [usersPage, setUsersPage] = useState(1);
-  const [usersPageSize] = useState(20);
+  const [leadsPagination, setLeadsPagination] = useState({ totalCount: 0, totalPages: 0, page: 1, pageSize: 20 });
   const [usersPagination, setUsersPagination] = useState({ totalCount: 0, totalPages: 0, page: 1, pageSize: 20 });
+  const leadsLimit = 20; // Default page size for leads
+  const usersLimit = 20; // Default page size for users
 
   // Forms
   const [formData, setFormData] = useState<Partial<BankOffer>>({ loanType: 'Personal Loan' });
@@ -63,20 +62,20 @@ export const useAdmin = (userProfile: UserProfile | null, user: User | null) => 
     else setIsLoading(true);
 
     try {
-      const [o, leadsResult, usersResult, i, s, a, usage] = await Promise.all([
+      const [o, l, u, i, s, a, usage] = await Promise.all([
         apiService.getBankOffers(),
-        apiService.getLeads(leadsPage, leadsPageSize),
-        apiService.getUsers(usersPage, usersPageSize),
+        apiService.getLeads(leadsPage, leadsLimit),
+        apiService.getUsers(usersPage, usersLimit),
         apiService.getStaffInvites(),
         apiService.getDbStatus(),
         apiService.getAdminAnalytics(),
         apiService.getTokenUsage()
       ]);
       setOffers(o);
-      setLeads(leadsResult.data);
-      setLeadsPagination(leadsResult.pagination);
-      setUsers(usersResult.data);
-      setUsersPagination(usersResult.pagination);
+      setLeads(l.data);
+      setLeadsPagination(l.pagination);
+      setUsers(u.data);
+      setUsersPagination(u.pagination);
       setStaffInvites(i);
       setDbStatus(s);
       setAnalytics(a);
@@ -88,7 +87,7 @@ export const useAdmin = (userProfile: UserProfile | null, user: User | null) => 
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [leadsPage, leadsPageSize, usersPage, usersPageSize]);
+  }, [leadsPage, usersPage, leadsLimit, usersLimit]);
 
   useEffect(() => {
     fetchData();
@@ -96,22 +95,26 @@ export const useAdmin = (userProfile: UserProfile | null, user: User | null) => 
 
   const refreshData = () => fetchData(true);
 
-  // Pagination Navigation Functions
+  // Pagination Handlers
+  const nextLeadsPage = () => {
+    if (leadsPage < leadsPagination.totalPages) setLeadsPage(prev => prev + 1);
+  };
+  const prevLeadsPage = () => {
+    if (leadsPage > 1) setLeadsPage(prev => prev - 1);
+  };
   const goToLeadsPage = (page: number) => {
-    const validPage = Math.max(1, Math.min(page, leadsPagination.totalPages || 1));
-    setLeadsPage(validPage);
+    if (page >= 1 && page <= leadsPagination.totalPages) setLeadsPage(page);
   };
 
+  const nextUsersPage = () => {
+    if (usersPage < usersPagination.totalPages) setUsersPage(prev => prev + 1);
+  };
+  const prevUsersPage = () => {
+    if (usersPage > 1) setUsersPage(prev => prev - 1);
+  };
   const goToUsersPage = (page: number) => {
-    const validPage = Math.max(1, Math.min(page, usersPagination.totalPages || 1));
-    setUsersPage(validPage);
+    if (page >= 1 && page <= usersPagination.totalPages) setUsersPage(page);
   };
-
-  const nextLeadsPage = () => goToLeadsPage(leadsPage + 1);
-  const prevLeadsPage = () => goToLeadsPage(leadsPage - 1);
-  
-  const nextUsersPage = () => goToUsersPage(usersPage + 1);
-  const prevUsersPage = () => goToUsersPage(usersPage - 1);
 
   // Bank Offer Actions
   const handleSaveOffer = async (e: React.FormEvent) => {
@@ -365,12 +368,11 @@ export const useAdmin = (userProfile: UserProfile | null, user: User | null) => 
     leadsStatusFilter, setLeadsStatusFilter,
     startDate, setStartDate,
     endDate, setEndDate,
-    // Pagination for Leads
-    leadsPage, leadsPageSize, leadsPagination,
-    goToLeadsPage, nextLeadsPage, prevLeadsPage,
-    // Pagination for Users
-    usersPage, usersPageSize, usersPagination,
-    goToUsersPage, nextUsersPage, prevUsersPage,
+    leadsPage, setLeadsPage,
+    usersPage, setUsersPage,
+    leadsPagination, usersPagination,
+    nextLeadsPage, prevLeadsPage, goToLeadsPage,
+    nextUsersPage, prevUsersPage, goToUsersPage,
     formData, setFormData,
     editingId, setEditingId,
     staffInviteData, setStaffInviteData,
