@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Outfit", system-ui, sans-serif;
+}
+
+@layer utilities {
+  /* CSS Variables for new design tokens */
+  :root {
+    --clr-bg: #F2F5FB;
+    --clr-surface: #FFFFFF;
+    --clr-surface-2: #F7F9FD;
+    --clr-border: #E4EAF4;
+    --clr-border-strong: #C8D3E8;
+    --clr-text-1: #0D1626;
+    --clr-text-2: #4A5878;
+    --clr-text-3: #8E9BB8;
+    --clr-blue: #1B6EF3;
+    --clr-blue-bg: #EBF2FF;
+    --clr-blue-text: #1253C4;
+    --clr-success: #00A86B;
+    --clr-success-bg: #E6F9F3;
+    --clr-success-text: #006F47;
+    --clr-warning: #D97706;
+    --clr-warning-bg: #FEF3C7;
+    --clr-warning-text: #92400E;
+    --clr-danger: #DC2626;
+    --clr-danger-bg: #FEE2E2;
+    --clr-danger-text: #991B1B;
+    --shadow-card: 0 1px 3px rgba(13, 22, 38, 0.06), 0 4px 12px rgba(13, 22, 38, 0.04);
+    --shadow-sheet: 0 -8px 32px rgba(13, 22, 38, 0.12);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --app-height: 100vh;
+  }
+
+  @supports (height: 100dvh) {
+    :root {
+      --app-height: 100dvh;
+    }
+  }
+
+  .h-app {
+    height: var(--app-height);
+  }
+
+  .min-h-app {
+    min-height: var(--app-height);
+  }
+
+  .pt-safe {
+    padding-top: var(--safe-top);
+  }
+
+  .pb-safe {
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .px-safe {
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+  }
+
+  .bottom-safe {
+    bottom: var(--safe-bottom);
+  }
+
+  .max-h-screen-safe {
+    max-height: calc(var(--app-height) - var(--safe-top) - var(--safe-bottom));
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .vertical-text {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(27, 110, 243, 0.15);
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(27, 110, 243, 0.25);
+  }
+}
+
+body {
+  @apply bg-[#F2F5FB] text-[#0D1626] font-sans;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply font-display font-bold;
+  letter-spacing: -0.01em;
+}
+
+/* Slider Styling - Professional Blue Theme */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--clr-border-strong);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--clr-blue);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(27, 110, 243, 0.35);
+  border: 2.5px solid white;
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 2px 8px rgba(27, 110, 243, 0.5);
+  transform: scale(1.1);
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--clr-blue);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(27, 110, 243, 0.35);
+  border: 2.5px solid white;
+  transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+  box-shadow: 0 2px 8px rgba(27, 110, 243, 0.5);
+  transform: scale(1.1);
+}
+
+.slider::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+.slider::-moz-range-progress {
+  background: var(--clr-blue);
+  height: 4px;
+}
+
+/* Focus states for accessibility */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  @apply outline-2 outline-offset-2 outline-[#1B6EF3];
+}
